@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from packages.core.models import Instrument
+from packages.core.models import Instrument, Order, Position
 
 
 class ExecutionProvider(ABC):
@@ -29,4 +29,14 @@ class ExecutionProvider(ABC):
     @abstractmethod
     async def get_instrument(self, symbol: str) -> Instrument:
         """Return broker metadata for an instrument."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def submit_order(self, order: Order) -> Order:
+        """Submit an order to the execution venue."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_position(self, symbol: str) -> Position | None:
+        """Return the current position for an instrument."""
         raise NotImplementedError
