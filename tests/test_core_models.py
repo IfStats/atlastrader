@@ -1,8 +1,25 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from packages.core.enums import AssetClass, SignalDirection, StrategyType, Timeframe
-from packages.core.models import Candle, Instrument, MarketState, Quote, Signal
+from packages.core.enums import (
+    AssetClass,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    PositionStatus,
+    SignalDirection,
+    StrategyType,
+    Timeframe,
+)
+from packages.core.models import (
+    Candle,
+    Instrument,
+    MarketState,
+    Order,
+    Position,
+    Quote,
+    Signal,
+)
 
 NOW = datetime.now(UTC)
 
@@ -102,3 +119,31 @@ def test_signal_defaults_to_candidate() -> None:
     assert signal.direction == SignalDirection.LONG
     assert signal.score == 84
     assert signal.status.value == "candidate"
+
+
+def test_order_defaults() -> None:
+    order = Order(
+        symbol="XAUUSD",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        quantity=Decimal("0.10"),
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+    assert order.status == OrderStatus.PENDING
+    assert order.quantity == Decimal("0.10")
+
+
+def test_position_defaults() -> None:
+    position = Position(
+        symbol="XAUUSD",
+        side=OrderSide.BUY,
+        quantity=Decimal("0.10"),
+        entry_price=Decimal("3348.21"),
+        current_price=Decimal("3350.21"),
+        opened_at=NOW,
+    )
+
+    assert position.status == PositionStatus.OPEN
+    assert position.unrealized_pnl == Decimal(0)

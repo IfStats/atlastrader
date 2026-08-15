@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field
 from packages.core.enums import (
     AssetClass,
     MarketStatus,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    PositionStatus,
     SignalDirection,
     SignalStatus,
     StrategyType,
@@ -135,3 +139,47 @@ class Signal(BaseModel):
     risk_reward_ratio: float | None = Field(default=None, gt=0)
 
     rationale: list[str] = Field(default_factory=list)
+
+
+class Order(BaseModel):
+    """An instruction that can be sent to an execution venue."""
+
+    symbol: str
+
+    side: OrderSide
+    order_type: OrderType
+    status: OrderStatus = OrderStatus.PENDING
+
+    quantity: Decimal = Field(gt=0)
+
+    price: Decimal | None = Field(default=None, gt=0)
+    stop_loss: Decimal | None = Field(default=None, gt=0)
+    take_profit: Decimal | None = Field(default=None, gt=0)
+
+    signal_id: str | None = None
+
+    created_at: datetime
+    updated_at: datetime
+
+
+class Position(BaseModel):
+    """An open or closed trading position."""
+
+    symbol: str
+
+    side: OrderSide
+    status: PositionStatus = PositionStatus.OPEN
+
+    quantity: Decimal = Field(gt=0)
+
+    entry_price: Decimal = Field(gt=0)
+    current_price: Decimal = Field(gt=0)
+
+    stop_loss: Decimal | None = Field(default=None, gt=0)
+    take_profit: Decimal | None = Field(default=None, gt=0)
+
+    opened_at: datetime
+    closed_at: datetime | None = None
+
+    realized_pnl: Decimal = Decimal(0)
+    unrealized_pnl: Decimal = Decimal(0)
