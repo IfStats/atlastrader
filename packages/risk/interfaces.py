@@ -1,29 +1,37 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
 
-from packages.core.config import RiskSettings
-from packages.core.models import MarketState, Order, Position, Signal
+from packages.core.models import MarketState, Order, Signal
 
 
 class RiskManager(ABC):
-    """Interface for AtlasTrader's risk management engine."""
+    """Interface for AtlasTrader risk management."""
+
+    @abstractmethod
+    def can_trade(
+        self,
+        daily_loss: Decimal,
+        open_positions: int = 0,
+    ) -> bool:
+        """Return whether trading is currently permitted."""
+        raise NotImplementedError
 
     @abstractmethod
     def approve_signal(
         self,
         signal: Signal,
         market_state: MarketState,
-        open_positions: list[Position],
+        open_positions: int = 0,
     ) -> bool:
-        """Determine whether a trading signal passes risk controls."""
+        """Determine whether a signal passes risk controls."""
         raise NotImplementedError
 
     @abstractmethod
     def validate_order(
         self,
         order: Order,
-        market_state: MarketState,
-        open_positions: list[Position],
+        market_state: MarketState | None = None,
+        open_positions: int = 0,
     ) -> bool:
         """Determine whether an order passes risk controls."""
         raise NotImplementedError
@@ -37,16 +45,5 @@ class RiskManager(ABC):
         contract_size: Decimal,
         risk_fraction: Decimal | None = None,
     ) -> Decimal:
-        """Calculate position size from account risk and stop distance."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def can_trade(self, daily_pnl: Decimal) -> bool:
-        """Return whether trading is currently allowed."""
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
-    def settings(self) -> RiskSettings:
-        """Return the active risk configuration."""
+        """Calculate a risk-based position size."""
         raise NotImplementedError

@@ -144,6 +144,7 @@ class Signal(BaseModel):
 class Order(BaseModel):
     """An instruction that can be sent to an execution venue."""
 
+    id: str
     symbol: str
 
     side: OrderSide
@@ -160,7 +161,6 @@ class Order(BaseModel):
 
     created_at: datetime
     updated_at: datetime
-
 
 class Position(BaseModel):
     """An open or closed trading position."""

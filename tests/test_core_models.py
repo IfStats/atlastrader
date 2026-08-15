@@ -123,7 +123,8 @@ def test_signal_defaults_to_candidate() -> None:
 
 def test_order_defaults() -> None:
     order = Order(
-        symbol="XAUUSD",
+    id="order-001",
+    symbol="XAUUSD",
         side=OrderSide.BUY,
         order_type=OrderType.MARKET,
         quantity=Decimal("0.10"),
@@ -147,3 +148,7 @@ def test_position_defaults() -> None:
 
     assert position.status == PositionStatus.OPEN
     assert position.unrealized_pnl == Decimal(0)
+
+
+
+

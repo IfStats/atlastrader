@@ -1,55 +1,46 @@
 from decimal import Decimal
 
 from packages.core.config import RiskSettings
-from packages.core.models import MarketState, Order, Position, Signal
+from packages.core.models import MarketState, Order, Signal
 from packages.risk.interfaces import RiskManager
 
 
 class DefaultRiskManager(RiskManager):
-    """Default deterministic risk engine for AtlasTrader."""
+    """Default implementation of AtlasTrader risk controls."""
 
-    def __init__(self, settings: RiskSettings | None = None) -> None:
-        self._settings = settings or RiskSettings()
+    REFERENCE_ACCOUNT_BALANCE = Decimal(10000)
 
-    @property
-    def settings(self) -> RiskSettings:
-        return self._settings
+    def __init__(self, settings: RiskSettings) -> None:
+        self.settings = settings
+
+    def can_trade(
+        self,
+        daily_loss: Decimal,
+        open_positions: int = 0,
+    ) -> bool:
+        """Return whether new trading activity is currently permitted."""
+
+        if not self.settings.trading_enabled:
+            return False
+
+        daily_loss_amount = abs(daily_loss)
+        max_daily_loss_amount = (
+            self.REFERENCE_ACCOUNT_BALANCE
+            * self.settings.max_daily_loss
+        )
+
+        if daily_loss_amount >= max_daily_loss_amount:
+            return False
+
+        return open_positions < self.settings.max_open_positions
 
     def approve_signal(
         self,
         signal: Signal,
         market_state: MarketState,
-        open_positions: list[Position],
+        open_positions: int = 0,
     ) -> bool:
         """Apply risk controls before a signal can become executable."""
-
-        if not self.can_trade(Decimal(0)):
-            return False
-
-        if not market_state.is_tradeable:
-            return False
-
-        if market_state.spread > self.settings.max_spread:
-            return False
-
-        if signal.risk_reward_ratio is None:
-            return False
-
-        if Decimal(str(signal.risk_reward_ratio)) < self.settings.min_risk_reward_ratio:
-            return False
-
-        if len(open_positions) >= self.settings.max_open_positions:
-            return False
-
-        return not (signal.entry_price is None or signal.stop_loss is None)
-
-    def validate_order(
-        self,
-        order: Order,
-        market_state: MarketState,
-        open_positions: list[Position],
-    ) -> bool:
-        """Apply risk controls immediately before order submission."""
 
         if not self.settings.trading_enabled:
             return False
@@ -57,13 +48,44 @@ class DefaultRiskManager(RiskManager):
         if not market_state.is_tradeable:
             return False
 
-        if market_state.spread > self.settings.max_spread:
+        if open_positions >= self.settings.max_open_positions:
             return False
 
-        if len(open_positions) >= self.settings.max_open_positions:
+        if signal.entry_price is None or signal.stop_loss is None:
             return False
 
-        return not order.quantity <= Decimal(0)
+        if signal.risk_reward_ratio is None:
+            return False
+
+        if signal.risk_reward_ratio < self.settings.min_risk_reward_ratio:
+            return False
+
+        return not market_state.spread > self.settings.max_spread
+
+    def validate_order(
+        self,
+        order: Order,
+        market_state: MarketState | None = None,
+        open_positions: int = 0,
+    ) -> bool:
+        """Validate an order against current risk controls."""
+
+        if not self.settings.trading_enabled:
+            return False
+
+        if open_positions >= self.settings.max_open_positions:
+            return False
+
+        if order.quantity <= Decimal(0):
+            return False
+
+        if market_state is not None:
+            if not market_state.is_tradeable:
+                return False
+
+            return not market_state.spread > self.settings.max_spread
+
+        return True
 
     def calculate_position_size(
         self,
@@ -73,16 +95,13 @@ class DefaultRiskManager(RiskManager):
         contract_size: Decimal,
         risk_fraction: Decimal | None = None,
     ) -> Decimal:
-        """Calculate quantity using fixed fractional risk.
+        """
+        Calculate position size from account risk and stop-loss distance.
 
         Formula:
-
             risk_amount = account_balance * risk_fraction
-
-            stop_distance = abs(entry_price - stop_loss)
-
-            position_size =
-                risk_amount / (stop_distance * contract_size)
+            price_risk = abs(entry_price - stop_loss)
+            position_size = risk_amount / (price_risk * contract_size)
         """
 
         if account_balance <= Decimal(0):
@@ -100,28 +119,13 @@ class DefaultRiskManager(RiskManager):
         if entry_price == stop_loss:
             raise ValueError("entry_price and stop_loss must be different")
 
-        risk_fraction = (
-            risk_fraction
-            if risk_fraction is not None
-            else self.settings.max_risk_per_trade
-        )
+        if risk_fraction is None:
+            risk_fraction = self.settings.max_risk_per_trade
 
         if risk_fraction <= Decimal(0):
             raise ValueError("risk_fraction must be greater than zero")
 
-        stop_distance = abs(entry_price - stop_loss)
         risk_amount = account_balance * risk_fraction
+        price_risk = abs(entry_price - stop_loss)
 
-        return risk_amount / (stop_distance * contract_size)
-
-    def can_trade(self, daily_pnl: Decimal) -> bool:
-        """Return whether the account is within its daily loss limit."""
-
-        if not self.settings.trading_enabled:
-            return False
-
-        daily_loss_limit = -abs(
-            Decimal(str(self.settings.max_daily_loss))
-        )
-
-        return daily_pnl > daily_loss_limit
+        return risk_amount / (price_risk * contract_size)
