@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from packages.core.enums import (
     AssetClass,
@@ -21,32 +21,46 @@ class Instrument(BaseModel):
     symbol: str
     name: str
     asset_class: AssetClass
-
-    base_currency: str | None = None
-    quote_currency: str | None = None
-
-    exchange: str | None = None
-    broker_symbol: str | None = None
-
+    quote_currency: str = "USD"
+    broker_symbol: str = ""
     tick_size: Decimal = Field(gt=0)
     contract_size: Decimal = Field(gt=0)
-
     min_volume: Decimal = Field(gt=0)
-    max_volume: Decimal | None = Field(default=None, gt=0)
-    volume_step: Decimal = Field(gt=0)
-
-    price_precision: int = Field(ge=0, le=10)
-    volume_precision: int = Field(ge=0, le=10)
-
-    market_status: MarketStatus = MarketStatus.UNKNOWN
-
-    trading_timezone: str | None = None
-
+    max_volume: Decimal | None = None
+    volume_step: Decimal
+    price_precision: int
+    volume_precision: int
     enabled: bool = False
-
     created_at: datetime
     updated_at: datetime
 
+    @model_validator(mode="after")
+    def validate_volume_constraints(self) -> "Instrument":
+        if (
+            self.max_volume is not None
+            and self.max_volume < self.min_volume
+        ):
+            raise ValueError(
+                "max_volume must be greater than or equal to min_volume"
+            )
+
+        if self.volume_step <= 0:
+            raise ValueError("volume_step must be greater than zero")
+
+        if self.min_volume % self.volume_step != 0:
+            raise ValueError(
+                "min_volume must be aligned with volume_step"
+            )
+
+        if (
+            self.max_volume is not None
+            and self.max_volume % self.volume_step != 0
+        ):
+            raise ValueError(
+                "max_volume must be aligned with volume_step"
+            )
+
+        return self
 
 class Quote(BaseModel):
     symbol: str
@@ -56,6 +70,15 @@ class Quote(BaseModel):
 
     timestamp: datetime
 
+    @model_validator(mode="after")
+    def validate_bid_ask(self) -> "Quote":
+        if self.ask < self.bid:
+            raise ValueError(
+                "ask must be greater than or equal to bid"
+            )
+
+        return self
+
     @property
     def spread(self) -> Decimal:
         return self.ask - self.bid
@@ -63,7 +86,6 @@ class Quote(BaseModel):
     @property
     def mid_price(self) -> Decimal:
         return (self.bid + self.ask) / Decimal(2)
-
 
 class Candle(BaseModel):
     symbol: str

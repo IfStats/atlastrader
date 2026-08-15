@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from packages.core.enums import Timeframe
 from packages.core.models import Candle, Quote
-from packages.market_data.interfaces import MarketDataProvider
+from packages.market_data.base import MarketDataProvider
 
 
 class MockMarketDataProvider(MarketDataProvider):
@@ -20,14 +20,14 @@ class MockMarketDataProvider(MarketDataProvider):
     async def get_candles(
         self,
         symbol: str,
-        timeframe: str,
+        timeframe: Timeframe,
         start: datetime,
         end: datetime,
     ) -> list[Candle]:
         return [
             Candle(
                 symbol=symbol,
-                timeframe=Timeframe(timeframe),
+                timeframe=timeframe,
                 timestamp=start,
                 open=Decimal("3345.00"),
                 high=Decimal("3350.00"),

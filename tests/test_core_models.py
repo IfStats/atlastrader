@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
+
 from packages.core.enums import (
     AssetClass,
     OrderSide,
@@ -57,6 +59,50 @@ def test_quote_calculates_spread_and_mid_price() -> None:
 
     assert quote.spread == Decimal("0.21")
     assert quote.mid_price == Decimal("3348.315")
+
+
+def test_quote_allows_equal_bid_and_ask() -> None:
+    quote = Quote(
+        symbol="XAUUSD",
+        bid=Decimal("3348.21"),
+        ask=Decimal("3348.21"),
+        timestamp=NOW,
+    )
+
+    assert quote.spread == Decimal(0)
+
+
+def test_quote_rejects_ask_below_bid() -> None:
+    with pytest.raises(
+        ValueError,
+        match="ask must be greater than or equal to bid",
+    ):
+        Quote(
+            symbol="XAUUSD",
+            bid=Decimal("3348.42"),
+            ask=Decimal("3348.21"),
+            timestamp=NOW,
+        )
+
+
+def test_quote_rejects_non_positive_bid() -> None:
+    with pytest.raises(ValueError):
+        Quote(
+            symbol="XAUUSD",
+            bid=Decimal(0),
+            ask=Decimal("3348.21"),
+            timestamp=NOW,
+        )
+
+
+def test_quote_rejects_non_positive_ask() -> None:
+    with pytest.raises(ValueError):
+        Quote(
+            symbol="XAUUSD",
+            bid=Decimal("3348.21"),
+            ask=Decimal(-1),
+            timestamp=NOW,
+        )
 
 
 def test_candle_properties() -> None:
@@ -123,8 +169,8 @@ def test_signal_defaults_to_candidate() -> None:
 
 def test_order_defaults() -> None:
     order = Order(
-    id="order-001",
-    symbol="XAUUSD",
+        id="order-001",
+        symbol="XAUUSD",
         side=OrderSide.BUY,
         order_type=OrderType.MARKET,
         quantity=Decimal("0.10"),
@@ -149,6 +195,159 @@ def test_position_defaults() -> None:
     assert position.status == PositionStatus.OPEN
     assert position.unrealized_pnl == Decimal(0)
 
+def test_instrument_allows_missing_max_volume() -> None:
+    instrument = Instrument(
+        symbol="EURUSD",
+        name="Euro / US Dollar",
+        asset_class=AssetClass.FOREX,
+        base_currency="EUR",
+        quote_currency="USD",
+        broker_symbol="EURUSD",
+        tick_size=Decimal("0.00001"),
+        contract_size=Decimal(100000),
+        min_volume=Decimal("0.01"),
+        volume_step=Decimal("0.01"),
+        price_precision=5,
+        volume_precision=2,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+    assert instrument.max_volume is None
 
 
+def test_instrument_rejects_non_positive_tick_size() -> None:
+    with pytest.raises(ValueError):
+        Instrument(
+            symbol="XAUUSD",
+            name="Gold / US Dollar",
+            asset_class=AssetClass.METAL,
+            quote_currency="USD",
+            tick_size=Decimal(0),
+            contract_size=Decimal(100),
+            min_volume=Decimal("0.01"),
+            volume_step=Decimal("0.01"),
+            price_precision=2,
+            volume_precision=2,
+            created_at=NOW,
+            updated_at=NOW,
+        )
 
+
+def test_instrument_rejects_non_positive_contract_size() -> None:
+    with pytest.raises(ValueError):
+        Instrument(
+            symbol="XAUUSD",
+            name="Gold / US Dollar",
+            asset_class=AssetClass.METAL,
+            quote_currency="USD",
+            tick_size=Decimal("0.01"),
+            contract_size=Decimal(0),
+            min_volume=Decimal("0.01"),
+            volume_step=Decimal("0.01"),
+            price_precision=2,
+            volume_precision=2,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+
+def test_instrument_rejects_non_positive_min_volume() -> None:
+    with pytest.raises(ValueError):
+        Instrument(
+            symbol="XAUUSD",
+            name="Gold / US Dollar",
+            asset_class=AssetClass.METAL,
+            quote_currency="USD",
+            tick_size=Decimal("0.01"),
+            contract_size=Decimal(100),
+            min_volume=Decimal(0),
+            volume_step=Decimal("0.01"),
+            price_precision=2,
+            volume_precision=2,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+
+def test_instrument_rejects_non_positive_volume_step() -> None:
+    with pytest.raises(ValueError):
+        Instrument(
+            symbol="XAUUSD",
+            name="Gold / US Dollar",
+            asset_class=AssetClass.METAL,
+            quote_currency="USD",
+            tick_size=Decimal("0.01"),
+            contract_size=Decimal(100),
+            min_volume=Decimal("0.01"),
+            volume_step=Decimal(0),
+            price_precision=2,
+            volume_precision=2,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+def test_instrument_rejects_max_volume_below_min_volume() -> None:
+    with pytest.raises(
+        ValueError,
+        match="max_volume must be greater than or equal to min_volume",
+    ):
+        Instrument(
+            symbol="XAUUSD",
+            name="Gold / US Dollar",
+            asset_class=AssetClass.METAL,
+            quote_currency="USD",
+            tick_size=Decimal("0.01"),
+            contract_size=Decimal(100),
+            min_volume=Decimal("1.00"),
+            max_volume=Decimal("0.50"),
+            volume_step=Decimal("0.01"),
+            price_precision=2,
+            volume_precision=2,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+
+def test_instrument_rejects_min_volume_not_aligned_to_step() -> None:
+    with pytest.raises(
+        ValueError,
+        match="min_volume must be aligned with volume_step",
+    ):
+        Instrument(
+            symbol="XAUUSD",
+            name="Gold / US Dollar",
+            asset_class=AssetClass.METAL,
+            quote_currency="USD",
+            tick_size=Decimal("0.01"),
+            contract_size=Decimal(100),
+            min_volume=Decimal("0.015"),
+            max_volume=Decimal(100),
+            volume_step=Decimal("0.01"),
+            price_precision=2,
+            volume_precision=3,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+
+
+def test_instrument_rejects_max_volume_not_aligned_to_step() -> None:
+    with pytest.raises(
+        ValueError,
+        match="max_volume must be aligned with volume_step",
+    ):
+        Instrument(
+            symbol="XAUUSD",
+            name="Gold / US Dollar",
+            asset_class=AssetClass.METAL,
+            quote_currency="USD",
+            tick_size=Decimal("0.01"),
+            contract_size=Decimal(100),
+            min_volume=Decimal("0.01"),
+            max_volume=Decimal("100.005"),
+            volume_step=Decimal("0.01"),
+            price_precision=2,
+            volume_precision=3,
+            created_at=NOW,
+            updated_at=NOW,
+        )

@@ -6,7 +6,7 @@ from packages.core.models import Candle, Quote
 
 
 class MarketDataProvider(ABC):
-    """Interface for any provider that supplies market data to AtlasTrader."""
+    """Interface for providers that supply market data to AtlasTrader."""
 
     @abstractmethod
     async def get_quote(self, symbol: str) -> Quote:
@@ -21,7 +21,7 @@ class MarketDataProvider(ABC):
         start: datetime,
         end: datetime,
     ) -> list[Candle]:
-        """Return historical candles for an instrument."""
+        """Return historical candles ordered from oldest to newest."""
         raise NotImplementedError
 
     @abstractmethod

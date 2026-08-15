@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from packages.core.enums import Timeframe
 from packages.market_data.mock import MockMarketDataProvider
 
 
@@ -25,11 +26,12 @@ async def test_mock_candles() -> None:
 
     candles = await provider.get_candles(
         symbol="XAUUSD",
-        timeframe="5m",
+        timeframe=Timeframe.M5,
         start=start,
         end=end,
     )
 
     assert len(candles) == 1
     assert candles[0].symbol == "XAUUSD"
+    assert candles[0].timeframe is Timeframe.M5
     assert candles[0].close > candles[0].open

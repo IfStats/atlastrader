@@ -1,57 +1,101 @@
-from abc import ABC, abstractmethod
+from decimal import Decimal
 
+from packages.core.enums import OrderStatus
 from packages.core.models import Instrument, Order, Position
+from packages.execution.interfaces import ExecutionProvider
 
 
-class ExecutionProvider(ABC):
-    """Abstract interface for a trading execution venue."""
+class MockExecutionProvider(ExecutionProvider):
+    """Deterministic execution provider for development and testing."""
 
-    @abstractmethod
+    def __init__(
+        self,
+        *,
+        balance: Decimal = Decimal(10000),
+        instruments: dict[str, Instrument] | None = None,
+    ) -> None:
+        self._balance = balance
+        self._instruments = instruments or {}
+        self._connected = False
+        self._orders: dict[str, Order] = {}
+        self._positions: dict[str, Position] = {}
+
     async def connect(self) -> None:
-        """Connect to the execution venue."""
-        raise NotImplementedError
+        self._connected = True
 
-    @abstractmethod
     async def disconnect(self) -> None:
-        """Disconnect from the execution venue."""
-        raise NotImplementedError
+        self._connected = False
 
-    @abstractmethod
     async def is_connected(self) -> bool:
-        """Return whether the execution venue is connected."""
-        raise NotImplementedError
+        return self._connected
 
-    @abstractmethod
     async def get_account_balance(self) -> float:
-        """Return the current account balance."""
-        raise NotImplementedError
+        return float(self._balance)
 
-    @abstractmethod
     async def get_instrument(self, symbol: str) -> Instrument:
-        """Return instrument metadata for a symbol."""
-        raise NotImplementedError
+        if symbol not in self._instruments:
+            raise KeyError(f"Instrument not found: {symbol}")
 
-    @abstractmethod
+        return self._instruments[symbol]
+
     async def submit_order(self, order: Order) -> Order:
-        """Submit an order to the execution venue."""
-        raise NotImplementedError
+        if not self._connected:
+            raise RuntimeError("Execution provider is not connected")
 
-    @abstractmethod
+        if order.symbol not in self._instruments:
+            raise KeyError(f"Instrument not found: {order.symbol}")
+
+        filled_order = order.model_copy(
+            update={
+                "status": OrderStatus.FILLED,
+            }
+        )
+
+        self._orders[order.id] = filled_order
+
+        return filled_order
+
     async def cancel_order(self, order_id: str) -> Order:
-        """Cancel an existing order."""
-        raise NotImplementedError
+        if order_id not in self._orders:
+            raise KeyError(f"Order not found: {order_id}")
 
-    @abstractmethod
+        order = self._orders[order_id]
+
+        cancelled_order = order.model_copy(
+            update={
+                "status": OrderStatus.CANCELLED,
+            }
+        )
+
+        self._orders[order_id] = cancelled_order
+
+        return cancelled_order
+
     async def get_order(self, order_id: str) -> Order:
-        """Return an existing order by ID."""
-        raise NotImplementedError
+        if order_id not in self._orders:
+            raise KeyError(f"Order not found: {order_id}")
 
-    @abstractmethod
+        return self._orders[order_id]
+
     async def get_position(self, symbol: str) -> Position | None:
-        """Return the current position for a symbol, if one exists."""
-        raise NotImplementedError
+        return self._positions.get(symbol)
 
-    @abstractmethod
     async def close_position(self, symbol: str) -> Position:
-        """Close the current position for a symbol."""
-        raise NotImplementedError
+        if symbol not in self._positions:
+            raise KeyError(f"Position not found: {symbol}")
+
+        position = self._positions[symbol]
+
+        closed_position = position.model_copy(
+            update={
+                "status": position.status.CLOSED,
+            }
+        )
+
+        self._positions[symbol] = closed_position
+
+        return closed_position
+
+    def add_instrument(self, instrument: Instrument) -> None:
+        """Register an instrument with the mock execution venue."""
+        self._instruments[instrument.symbol] = instrument
