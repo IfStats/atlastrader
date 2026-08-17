@@ -122,6 +122,84 @@ def test_candle_properties() -> None:
     assert candle.bullish is True
     assert candle.bearish is False
 
+def test_candle_allows_valid_ohlc() -> None:
+    candle = Candle(
+        symbol="XAUUSD",
+        timeframe=Timeframe.M5,
+        timestamp=NOW,
+        open=Decimal("3345.00"),
+        high=Decimal("3350.00"),
+        low=Decimal("3343.00"),
+        close=Decimal("3349.00"),
+    )
+
+    assert candle.high >= candle.open
+    assert candle.high >= candle.close
+    assert candle.low <= candle.open
+    assert candle.low <= candle.close
+
+
+def test_candle_rejects_high_below_open() -> None:
+    with pytest.raises(
+        ValueError,
+        match="high must be greater than or equal to open",
+    ):
+        Candle(
+            symbol="XAUUSD",
+            timeframe=Timeframe.M5,
+            timestamp=NOW,
+            open=Decimal("3350.00"),
+            high=Decimal("3349.00"),
+            low=Decimal("3343.00"),
+            close=Decimal("3347.00"),
+        )
+
+
+def test_candle_rejects_high_below_close() -> None:
+    with pytest.raises(
+        ValueError,
+        match="high must be greater than or equal to close",
+    ):
+        Candle(
+            symbol="XAUUSD",
+            timeframe=Timeframe.M5,
+            timestamp=NOW,
+            open=Decimal("3345.00"),
+            high=Decimal("3348.00"),
+            low=Decimal("3343.00"),
+            close=Decimal("3350.00"),
+        )
+
+
+def test_candle_rejects_low_above_open() -> None:
+    with pytest.raises(
+        ValueError,
+        match="low must be less than or equal to open",
+    ):
+        Candle(
+            symbol="XAUUSD",
+            timeframe=Timeframe.M5,
+            timestamp=NOW,
+            open=Decimal("3345.00"),
+            high=Decimal("3350.00"),
+            low=Decimal("3346.00"),
+            close=Decimal("3348.00"),
+        )
+
+def test_candle_rejects_low_above_close() -> None:
+    with pytest.raises(
+        ValueError,
+        match="low must be less than or equal to close",
+    ):
+        Candle(
+            symbol="XAUUSD",
+            timeframe=Timeframe.M5,
+            timestamp=NOW,
+            open=Decimal("3350.00"),
+            high=Decimal("3352.00"),
+            low=Decimal("3349.00"),
+            close=Decimal("3348.00"),
+        )
 
 def test_market_state() -> None:
     state = MarketState(

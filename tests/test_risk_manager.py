@@ -88,19 +88,6 @@ def test_signal_rejected_when_market_is_not_tradeable() -> None:
     assert manager.approve_signal(signal, market_state) is False
 
 
-def test_position_size_is_calculated_from_risk() -> None:
-    manager = DefaultRiskManager(make_settings())
-
-    size = manager.calculate_position_size(
-        account_balance=Decimal(10000),
-        entry_price=Decimal(3350),
-        stop_loss=Decimal(3345),
-        contract_size=Decimal(100),
-    )
-
-    assert size > Decimal(0)
-
-
 def test_order_rejected_when_trading_disabled() -> None:
     manager = DefaultRiskManager(
         RiskSettings(trading_enabled=False)

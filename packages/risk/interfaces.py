@@ -12,7 +12,10 @@ class RiskManager(ABC):
     def can_trade(
         self,
         daily_loss: Decimal,
-        portfolio: PortfolioSnapshot,
+        portfolio: PortfolioSnapshot | None = None,
+        *,
+        open_positions: int | None = None,
+        current_exposure: Decimal | None = None,
     ) -> bool:
         """Return whether trading is currently permitted."""
         raise NotImplementedError
@@ -22,7 +25,10 @@ class RiskManager(ABC):
         self,
         signal: Signal,
         market_state: MarketState,
-        portfolio: PortfolioSnapshot,
+        portfolio: PortfolioSnapshot | None = None,
+        *,
+        open_positions: int | None = None,
+        current_exposure: Decimal | None = None,
     ) -> bool:
         """Determine whether a signal passes risk controls."""
         raise NotImplementedError
@@ -31,20 +37,11 @@ class RiskManager(ABC):
     def validate_order(
         self,
         order: Order,
-        portfolio: PortfolioSnapshot,
+        portfolio: PortfolioSnapshot | None = None,
         market_state: MarketState | None = None,
+        *,
+        open_positions: int | None = None,
+        current_exposure: Decimal | None = None,
     ) -> bool:
         """Determine whether an order passes risk controls."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def calculate_position_size(
-        self,
-        account_balance: Decimal,
-        entry_price: Decimal,
-        stop_loss: Decimal,
-        contract_size: Decimal,
-        risk_fraction: Decimal | None = None,
-    ) -> Decimal:
-        """Calculate a risk-based position size."""
         raise NotImplementedError

@@ -87,6 +87,7 @@ class Quote(BaseModel):
     def mid_price(self) -> Decimal:
         return (self.bid + self.ask) / Decimal(2)
 
+
 class Candle(BaseModel):
     symbol: str
     timeframe: Timeframe
@@ -99,6 +100,32 @@ class Candle(BaseModel):
     close: Decimal = Field(gt=0)
 
     volume: Decimal = Field(default=Decimal(0), ge=0)
+
+    @model_validator(mode="after")
+    def validate_ohlc(self) -> "Candle":
+        """Validate the internal consistency of OHLC prices."""
+
+        if self.high < self.open:
+            raise ValueError(
+                "high must be greater than or equal to open"
+            )
+
+        if self.high < self.close:
+            raise ValueError(
+                "high must be greater than or equal to close"
+            )
+
+        if self.low > self.open:
+            raise ValueError(
+                "low must be less than or equal to open"
+            )
+
+        if self.low > self.close:
+            raise ValueError(
+                "low must be less than or equal to close"
+            )
+
+        return self
 
     @property
     def range(self) -> Decimal:
@@ -115,6 +142,7 @@ class Candle(BaseModel):
     @property
     def bearish(self) -> bool:
         return self.close < self.open
+
 
 
 class MarketState(BaseModel):

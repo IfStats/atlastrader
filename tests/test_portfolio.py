@@ -1,3 +1,4 @@
+
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -13,21 +14,22 @@ NOW = datetime.now(UTC)
 
 def make_position(
     symbol: str = "XAUUSD",
+    side: OrderSide = OrderSide.BUY,
     quantity: Decimal = Decimal("0.10"),
-    entry_price: Decimal = Decimal(2000),
-    unrealized_pnl: Decimal = Decimal(25),
+    entry_price: Decimal = Decimal(3300),
+    current_price: Decimal = Decimal(3300),
+    unrealized_pnl: Decimal = Decimal(0),
     realized_pnl: Decimal = Decimal(0),
 ) -> Position:
     return Position(
         symbol=symbol,
-        side=OrderSide.BUY,
-        status=PositionStatus.OPEN,
+        side=side,
         quantity=quantity,
         entry_price=entry_price,
-        current_price=entry_price,
+        current_price=current_price,
         opened_at=NOW,
-        realized_pnl=realized_pnl,
         unrealized_pnl=unrealized_pnl,
+        realized_pnl=realized_pnl,
     )
 
 
@@ -124,6 +126,7 @@ def test_available_equity() -> None:
         make_position(
             quantity=Decimal("0.10"),
             entry_price=Decimal(2000),
+            unrealized_pnl=Decimal(25),
         )
     )
 
@@ -140,6 +143,7 @@ def test_negative_balance_is_rejected() -> None:
         PortfolioService(
             balance=Decimal(-1),
         )
+
 
 def test_update_position_changes_price_and_unrealized_pnl() -> None:
     service = PortfolioService(
@@ -224,6 +228,7 @@ def test_close_missing_position_is_rejected() -> None:
             realized_pnl=Decimal(10),
         )
 
+
 def test_mark_long_position_calculates_unrealized_pnl() -> None:
     service = PortfolioService(
         balance=Decimal(10000),
@@ -259,8 +264,7 @@ def test_mark_short_position_calculates_unrealized_pnl() -> None:
     position = make_position(
         quantity=Decimal("0.10"),
         entry_price=Decimal(2000),
-    ).model_copy(
-        update={"side": OrderSide.SELL}
+        side=OrderSide.SELL,
     )
 
     service.add_position(position)
@@ -351,6 +355,7 @@ def test_position_lifecycle_mark_then_close() -> None:
     assert final_snapshot.net_pnl == Decimal(100)
     assert final_snapshot.equity == Decimal(10100)
 
+
 def test_update_closed_position_is_rejected() -> None:
     service = PortfolioService(
         balance=Decimal(10000),
@@ -373,6 +378,7 @@ def test_update_closed_position_is_rejected() -> None:
             current_price=Decimal(2025),
             unrealized_pnl=Decimal(50),
         )
+
 
 def test_snapshot_aggregates_multiple_positions() -> None:
     service = PortfolioService(
@@ -403,3 +409,84 @@ def test_snapshot_aggregates_multiple_positions() -> None:
     assert snapshot.unrealized_pnl == Decimal(150)
     assert snapshot.total_exposure == Decimal("201.10")
     assert snapshot.equity == Decimal(10150)
+
+
+def test_mark_position_calculates_unrealized_profit() -> None:
+    portfolio = PortfolioService(
+        balance=Decimal(10000),
+    )
+
+    position = make_position(
+        symbol="XAUUSD",
+        side=OrderSide.BUY,
+        quantity=Decimal("0.10"),
+        entry_price=Decimal(3300),
+        current_price=Decimal(3300),
+    )
+
+    portfolio.add_position(position)
+
+    updated = portfolio.mark_position(
+        "XAUUSD",
+        current_price=Decimal(3310),
+        contract_size=Decimal(100),
+    )
+
+    assert updated.current_price == Decimal(3310)
+    assert updated.unrealized_pnl == Decimal(100)
+
+
+def test_mark_position_calculates_unrealized_loss_for_sell() -> None:
+    portfolio = PortfolioService(
+        balance=Decimal(10000),
+    )
+
+    position = make_position(
+        symbol="XAUUSD",
+        side=OrderSide.SELL,
+        quantity=Decimal("0.10"),
+        entry_price=Decimal(3300),
+        current_price=Decimal(3300),
+    )
+
+    portfolio.add_position(position)
+
+    updated = portfolio.mark_position(
+        "XAUUSD",
+        current_price=Decimal(3310),
+        contract_size=Decimal(100),
+    )
+
+    assert updated.unrealized_pnl == Decimal(-100)
+
+
+def test_snapshot_reflects_realized_pnl_after_close() -> None:
+    portfolio = PortfolioService(
+        balance=Decimal(10000),
+    )
+
+    position = make_position(
+        symbol="XAUUSD",
+        side=OrderSide.BUY,
+        quantity=Decimal("0.10"),
+        entry_price=Decimal(3300),
+        current_price=Decimal(3300),
+    )
+
+    portfolio.add_position(position)
+
+    portfolio.close_position(
+        "XAUUSD",
+        current_price=Decimal(3310),
+        realized_pnl=Decimal(100),
+    )
+
+    snapshot = portfolio.snapshot()
+
+    assert snapshot.balance == Decimal(10000)
+    assert snapshot.realized_pnl == Decimal(100)
+    assert snapshot.unrealized_pnl == Decimal(0)
+    assert snapshot.equity == Decimal(10100)
+    assert snapshot.open_positions == 0
+    assert snapshot.total_exposure == Decimal(0)
+
