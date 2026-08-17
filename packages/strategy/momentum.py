@@ -1,3 +1,4 @@
+
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -15,11 +16,28 @@ class MomentumStrategy(Strategy):
         minimum_score: Decimal = Decimal("0.70"),
         risk_reward_ratio: float = 2.0,
     ) -> None:
+        if minimum_score < Decimal(0):
+            raise ValueError("minimum_score must be non-negative")
+
+        if minimum_score > Decimal(1):
+            raise ValueError("minimum_score must not exceed 1")
+
+        if risk_reward_ratio <= 0:
+            raise ValueError("risk_reward_ratio must be greater than zero")
+
         self.minimum_score = minimum_score
         self.risk_reward_ratio = risk_reward_ratio
 
     def generate_signal(self, market_state: MarketState) -> Signal | None:
+        """Generate a momentum signal from the current market state."""
+
         if not market_state.is_tradeable:
+            return None
+
+        if market_state.price <= Decimal(0):
+            return None
+
+        if market_state.volatility <= Decimal(0):
             return None
 
         momentum_score = Decimal(str(market_state.momentum_score))
@@ -38,17 +56,23 @@ class MomentumStrategy(Strategy):
 
         entry_price = market_state.price
         risk_distance = market_state.volatility
+        reward_distance = (
+            risk_distance * Decimal(str(self.risk_reward_ratio))
+        )
 
         if direction is SignalDirection.LONG:
             stop_loss = entry_price - risk_distance
-            take_profit = entry_price + (
-                risk_distance * Decimal(str(self.risk_reward_ratio))
-            )
+            take_profit = entry_price + reward_distance
         else:
             stop_loss = entry_price + risk_distance
-            take_profit = entry_price - (
-                risk_distance * Decimal(str(self.risk_reward_ratio))
-            )
+            take_profit = entry_price - reward_distance
+
+        if direction is SignalDirection.LONG:
+            if not stop_loss < entry_price < take_profit:
+                return None
+        else:
+            if not take_profit < entry_price < stop_loss:
+                return None
 
         signal_score = int(
             (trend_score + momentum_score) * Decimal(50)
@@ -71,3 +95,4 @@ class MomentumStrategy(Strategy):
                 "Market is tradeable",
             ],
         )
+

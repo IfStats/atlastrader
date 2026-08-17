@@ -135,22 +135,24 @@ class MT5ExecutionProvider(ExecutionProvider):
             raise ValueError(f"Invalid volume step for {symbol}")
 
         return Instrument(
-    symbol=symbol,
-    name=info.name,
-    asset_class=self._asset_class(info),
-    quote_currency=str(getattr(info, "currency_profit", "") or ""),
-    broker_symbol=info.name,
-    tick_size=tick_size,
-    contract_size=contract_size,
-    min_volume=min_volume,
-    max_volume=max_volume,
-    volume_step=volume_step,
-    price_precision=info.digits,
-    volume_precision=self._volume_precision(volume_step),
-    enabled=bool(info.visible),
-    created_at=datetime.now(UTC),
-    updated_at=datetime.now(UTC),
-)
+            symbol=symbol,
+            name=info.name,
+            asset_class=self._asset_class(info),
+            quote_currency=str(
+                getattr(info, "currency_profit", "") or ""
+            ),
+            broker_symbol=info.name,
+            tick_size=tick_size,
+            contract_size=contract_size,
+            min_volume=min_volume,
+            max_volume=max_volume,
+            volume_step=volume_step,
+            price_precision=info.digits,
+            volume_precision=self._volume_precision(volume_step),
+            enabled=bool(info.visible),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
 
     async def submit_order(self, order: Order) -> Order:
         """Submit a market order to MetaTrader 5."""
@@ -182,6 +184,12 @@ class MT5ExecutionProvider(ExecutionProvider):
             raise ValueError(
                 f"Order quantity {order.quantity} exceeds "
                 f"maximum volume {instrument.max_volume}"
+            )
+
+        if order.quantity % instrument.volume_step != 0:
+            raise ValueError(
+                f"Order quantity {order.quantity} must be aligned "
+                f"with volume step {instrument.volume_step}"
             )
 
         tick = mt5.symbol_info_tick(order.symbol)

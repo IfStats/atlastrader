@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 
 from packages.core.models import MarketState, Order, Signal
+from packages.portfolio.models import PortfolioSnapshot
 
 
 class RiskManager(ABC):
@@ -11,7 +12,7 @@ class RiskManager(ABC):
     def can_trade(
         self,
         daily_loss: Decimal,
-        open_positions: int = 0,
+        portfolio: PortfolioSnapshot,
     ) -> bool:
         """Return whether trading is currently permitted."""
         raise NotImplementedError
@@ -21,7 +22,7 @@ class RiskManager(ABC):
         self,
         signal: Signal,
         market_state: MarketState,
-        open_positions: int = 0,
+        portfolio: PortfolioSnapshot,
     ) -> bool:
         """Determine whether a signal passes risk controls."""
         raise NotImplementedError
@@ -30,8 +31,8 @@ class RiskManager(ABC):
     def validate_order(
         self,
         order: Order,
+        portfolio: PortfolioSnapshot,
         market_state: MarketState | None = None,
-        open_positions: int = 0,
     ) -> bool:
         """Determine whether an order passes risk controls."""
         raise NotImplementedError

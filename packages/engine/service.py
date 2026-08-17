@@ -1,28 +1,40 @@
+
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from packages.core.enums import OrderSide, OrderStatus, OrderType, Timeframe
-from packages.core.models import MarketState, Order, Signal
+from packages.core.enums import (
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    PositionStatus,
+    Timeframe,
+)
+from packages.core.models import MarketState, Order, Position, Signal
 from packages.engine.interfaces import TradingEngine
 from packages.execution.interfaces import ExecutionProvider
+from packages.portfolio.service import PortfolioService
 from packages.risk.interfaces import RiskManager
-from packages.strategy.interfaces import Strategy
+from packages.strategy.service import StrategyService
 
 
 class DefaultTradingEngine(TradingEngine):
-    """Coordinates market analysis, strategy, risk, and execution."""
+    """Coordinates market analysis, strategy, risk, execution, and portfolio."""
 
     def __init__(
         self,
         *,
-        strategy: Strategy,
+        strategy_service: StrategyService,
         risk_manager: RiskManager,
         execution_provider: ExecutionProvider,
+        portfolio: PortfolioService | None = None,
         default_quantity: Decimal = Decimal("0.01"),
     ) -> None:
-        self.strategy = strategy
+        self.strategy_service = strategy_service
         self.risk_manager = risk_manager
         self.execution_provider = execution_provider
+        self.portfolio = portfolio or PortfolioService(
+            balance=Decimal(10000),
+        )
         self.default_quantity = default_quantity
 
     async def process_market_state(
@@ -31,7 +43,7 @@ class DefaultTradingEngine(TradingEngine):
     ) -> Order | None:
         """Generate, approve, and execute a trading signal."""
 
-        signal = self.strategy.generate_signal(market_state)
+        signal = self.strategy_service.select_signal(market_state)
 
         if signal is None:
             return None
@@ -40,9 +52,14 @@ class DefaultTradingEngine(TradingEngine):
             return None
 
         if not await self.execution_provider.is_connected():
-            raise RuntimeError("Execution provider is not connected")
+            raise RuntimeError(
+                "Execution provider is not connected"
+            )
 
-        return await self.execute_signal(signal, market_state)
+        return await self.execute_signal(
+            signal,
+            market_state,
+        )
 
     async def execute_signal(
         self,
@@ -52,7 +69,9 @@ class DefaultTradingEngine(TradingEngine):
         """Validate and execute an approved trading signal."""
 
         if not await self.execution_provider.is_connected():
-            raise RuntimeError("Execution provider is not connected")
+            raise RuntimeError(
+                "Execution provider is not connected"
+            )
 
         if signal.entry_price is None:
             return None
@@ -69,12 +88,12 @@ class DefaultTradingEngine(TradingEngine):
                 spread=Decimal(0),
             )
 
-        open_positions = 0
+        portfolio = self.portfolio.snapshot()
 
         if not self.risk_manager.approve_signal(
             signal,
             market_state,
-            open_positions,
+            portfolio,
         ):
             return None
 
@@ -95,12 +114,39 @@ class DefaultTradingEngine(TradingEngine):
 
         if not self.risk_manager.validate_order(
             order,
+            portfolio,
             market_state,
-            open_positions,
         ):
             return None
 
-        return await self.execution_provider.submit_order(order)
+        executed_order = await self.execution_provider.submit_order(
+            order
+        )
+
+        if executed_order.status is OrderStatus.FILLED:
+            self._update_portfolio(executed_order)
+
+        return executed_order
+
+    def _update_portfolio(self, order: Order) -> None:
+        """Record a filled order as an open portfolio position."""
+
+        if order.price is None:
+            return
+
+        position = Position(
+            symbol=order.symbol,
+            side=order.side,
+            status=PositionStatus.OPEN,
+            quantity=order.quantity,
+            entry_price=order.price,
+            current_price=order.price,
+            stop_loss=order.stop_loss,
+            take_profit=order.take_profit,
+            opened_at=order.updated_at,
+        )
+
+        self.portfolio.add_position(position)
 
     async def run_once(
         self,
@@ -147,7 +193,9 @@ class DefaultTradingEngine(TradingEngine):
     def _create_order_id() -> str:
         """Create a unique identifier for an engine-generated order."""
 
-        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
+        timestamp = datetime.now(UTC).strftime(
+            "%Y%m%d%H%M%S%f"
+        )
         return f"engine-{timestamp}"
 
     @staticmethod
@@ -159,3 +207,4 @@ class DefaultTradingEngine(TradingEngine):
             if signal.direction.value == "long"
             else OrderSide.SELL
         )
+

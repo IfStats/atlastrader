@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from packages.core.enums import OrderStatus
+from packages.core.enums import OrderStatus, PositionStatus
 from packages.core.models import Instrument, Order, Position
 from packages.execution.interfaces import ExecutionProvider
 
@@ -88,7 +88,7 @@ class MockExecutionProvider(ExecutionProvider):
 
         closed_position = position.model_copy(
             update={
-                "status": position.status.CLOSED,
+                "status": PositionStatus.CLOSED,
             }
         )
 
@@ -99,3 +99,7 @@ class MockExecutionProvider(ExecutionProvider):
     def add_instrument(self, instrument: Instrument) -> None:
         """Register an instrument with the mock execution venue."""
         self._instruments[instrument.symbol] = instrument
+
+    def add_position(self, position: Position) -> None:
+        """Add a position to the mock execution venue."""
+        self._positions[position.symbol] = position

@@ -10,6 +10,7 @@ from packages.engine.service import DefaultTradingEngine
 from packages.execution.mock import MockExecutionProvider
 from packages.risk.manager import DefaultRiskManager
 from packages.strategy.momentum import MomentumStrategy
+from packages.strategy.service import StrategyService
 
 NOW = datetime.now(UTC)
 
@@ -51,7 +52,9 @@ def make_market_state(
 
 
 def make_engine() -> DefaultTradingEngine:
-    strategy = MomentumStrategy()
+    strategy_service = StrategyService(
+    [MomentumStrategy()]
+)
 
     risk_manager = DefaultRiskManager(
         RiskSettings(trading_enabled=True)
@@ -62,7 +65,7 @@ def make_engine() -> DefaultTradingEngine:
     )
 
     return DefaultTradingEngine(
-        strategy=strategy,
+    strategy_service=strategy_service,
         risk_manager=risk_manager,
         execution_provider=execution_provider,
     )
@@ -121,7 +124,9 @@ async def test_engine_creates_and_executes_order() -> None:
 @pytest.mark.asyncio
 async def test_engine_rejects_order_when_execution_instrument_is_missing() -> None:
     engine = DefaultTradingEngine(
-        strategy=MomentumStrategy(),
+    strategy_service=StrategyService(
+        [MomentumStrategy()]
+    ),
         risk_manager=DefaultRiskManager(
             RiskSettings(trading_enabled=True)
         ),

@@ -1,7 +1,8 @@
-from datetime import UTC, datetime
+from decimal import Decimal
 
 from packages.core.models import MarketState, Order, Position
 from packages.execution.interfaces import ExecutionProvider
+from packages.portfolio.models import PortfolioSnapshot
 from packages.risk.interfaces import RiskManager
 
 
@@ -10,37 +11,43 @@ class ExecutionService:
 
     def __init__(
         self,
+        *,
         provider: ExecutionProvider,
         risk_manager: RiskManager,
+        portfolio: PortfolioSnapshot | None = None,
     ) -> None:
         self.provider = provider
         self.risk_manager = risk_manager
+        self.portfolio = portfolio
 
-    async def connect(self) -> None:
-        """Connect to the execution venue."""
-        await self.provider.connect()
-
-    async def disconnect(self) -> None:
-        """Disconnect from the execution venue."""
-        await self.provider.disconnect()
-
-    async def execute_order(
+    async def submit_order(
         self,
         order: Order,
+        *,
         market_state: MarketState | None = None,
-        open_positions: int = 0,
     ) -> Order:
-        """Validate and execute an order."""
+        """Validate and submit an order through the execution provider."""
 
-        if not self.risk_manager.validate_order(
+        portfolio = self.portfolio
+
+        if portfolio is None:
+            portfolio = PortfolioSnapshot(
+                balance=Decimal(0),
+                equity=Decimal(0),
+                open_positions=0,
+                total_exposure=Decimal(0),
+            )
+
+        approved = self.risk_manager.validate_order(
             order,
+            portfolio,
             market_state,
-            open_positions,
-        ):
+        )
+
+        if not approved:
             return order.model_copy(
                 update={
                     "status": "rejected",
-                    "updated_at": datetime.now(UTC),
                 }
             )
 
@@ -51,4 +58,5 @@ class ExecutionService:
         symbol: str,
     ) -> Position | None:
         """Return the current position for an instrument."""
+
         return await self.provider.get_position(symbol)

@@ -135,3 +135,36 @@ def test_order_accepted_when_trading_enabled() -> None:
     )
 
     assert manager.validate_order(order) is True
+
+def test_signal_rejected_when_portfolio_exposure_exceeds_limit() -> None:
+    manager = DefaultRiskManager(make_settings())
+
+    signal = make_signal()
+    market_state = make_market_state()
+
+    assert (
+        manager.approve_signal(
+            signal,
+            market_state,
+            open_positions=1,
+            current_exposure=Decimal(5001),
+        )
+        is False
+    )
+
+
+def test_signal_approved_when_portfolio_exposure_is_within_limit() -> None:
+    manager = DefaultRiskManager(make_settings())
+
+    signal = make_signal()
+    market_state = make_market_state()
+
+    assert (
+        manager.approve_signal(
+            signal,
+            market_state,
+            open_positions=1,
+            current_exposure=Decimal(4000),
+        )
+        is True
+    )

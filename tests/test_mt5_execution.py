@@ -2,6 +2,7 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+import MetaTrader5 as mt5  # type: ignore[import-untyped]
 import pytest
 
 from packages.core.enums import AssetClass, OrderSide, OrderStatus, OrderType
@@ -295,3 +296,96 @@ async def test_get_position_returns_none_when_no_position_exists() -> None:
 
     assert position is None
 
+
+@pytest.mark.asyncio
+async def test_submit_order_rejects_quantity_not_aligned_to_volume_step() -> None:
+    provider = make_provider()
+
+    order = make_order().model_copy(
+        update={"quantity": Decimal("0.015")}
+    )
+
+    info = MagicMock()
+    info.name = "XAUUSD"
+    info.path = "Forex\\Metals"
+    info.trade_tick_size = 0.01
+    info.trade_contract_size = 100.0
+    info.volume_min = 0.01
+    info.volume_max = 100.0
+    info.volume_step = 0.01
+    info.digits = 2
+    info.visible = True
+    info.trade_mode = 0
+    info.currency_base = "XAU"
+    info.currency_profit = "USD"
+    info.exchange = None
+
+    with (
+        patch(
+            "packages.execution.mt5.mt5.terminal_info",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "packages.execution.mt5.mt5.symbol_info",
+            return_value=info,
+        ),
+    ):
+        provider._connected = True
+
+        with pytest.raises(
+            ValueError,
+            match="aligned with volume step",
+        ):
+            await provider.submit_order(order)
+
+
+@pytest.mark.asyncio
+async def test_submit_order_accepts_quantity_aligned_to_volume_step() -> None:
+    provider = make_provider()
+    order = make_order()
+
+    info = MagicMock()
+    info.name = "XAUUSD"
+    info.path = "Forex\\Metals"
+    info.trade_tick_size = 0.01
+    info.trade_contract_size = 100.0
+    info.volume_min = 0.01
+    info.volume_max = 100.0
+    info.volume_step = 0.01
+    info.digits = 2
+    info.visible = True
+    info.trade_mode = 0
+    info.currency_base = "XAU"
+    info.currency_profit = "USD"
+    info.exchange = None
+
+    tick = MagicMock()
+    tick.ask = 3350.25
+    tick.bid = 3350.05
+
+    result = MagicMock()
+    result.retcode = mt5.TRADE_RETCODE_DONE
+    result.price = 3350.25
+
+    with (
+        patch(
+            "packages.execution.mt5.mt5.terminal_info",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "packages.execution.mt5.mt5.symbol_info",
+            return_value=info,
+        ),
+        patch(
+            "packages.execution.mt5.mt5.symbol_info_tick",
+            return_value=tick,
+        ),
+        patch(
+            "packages.execution.mt5.mt5.order_send",
+            return_value=result,
+        ),
+    ):
+        provider._connected = True
+        submitted = await provider.submit_order(order)
+
+    assert submitted.status is OrderStatus.FILLED
