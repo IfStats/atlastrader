@@ -2,15 +2,15 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 from packages.core.enums import Timeframe
-from packages.core.models import Candle, Quote
+from packages.core.models import Candle, MarketState, Quote
 
 
 class MarketDataProvider(ABC):
-    """Interface for providers that supply market data to AtlasTrader."""
+    """Abstract interface for market-data providers."""
 
     @abstractmethod
     async def get_quote(self, symbol: str) -> Quote:
-        """Return the latest quote for an instrument."""
+        """Fetch the latest quote for a symbol."""
         raise NotImplementedError
 
     @abstractmethod
@@ -21,15 +21,30 @@ class MarketDataProvider(ABC):
         start: datetime,
         end: datetime,
     ) -> list[Candle]:
-        """Return historical candles ordered from oldest to newest."""
+        """Fetch historical candles for a symbol."""
         raise NotImplementedError
 
     @abstractmethod
     async def subscribe_quotes(self, symbols: list[str]) -> None:
-        """Start receiving live quotes for the supplied symbols."""
+        """Subscribe to live quote updates."""
         raise NotImplementedError
 
     @abstractmethod
     async def unsubscribe_quotes(self, symbols: list[str]) -> None:
-        """Stop receiving live quotes."""
+        """Unsubscribe from live quote updates."""
         raise NotImplementedError
+
+    async def get_market_state(
+        self,
+        symbol: str,
+    ) -> MarketState:
+        """Fetch the normalized current market state.
+
+        Providers that expose normalized market-state retrieval can
+        override this method. The base implementation remains concrete
+        so existing market-data providers are not forced to implement it.
+        """
+        raise NotImplementedError(
+            "This market-data provider does not implement "
+            "get_market_state"
+        )

@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -12,6 +11,7 @@ from packages.core.enums import (
 from packages.core.models import MarketState, Order, Position, Signal
 from packages.engine.interfaces import TradingEngine
 from packages.execution.interfaces import ExecutionProvider
+from packages.market_data.base import MarketDataProvider
 from packages.portfolio.service import PortfolioService
 from packages.risk.interfaces import RiskManager
 from packages.strategy.service import StrategyService
@@ -26,12 +26,14 @@ class DefaultTradingEngine(TradingEngine):
         strategy_service: StrategyService,
         risk_manager: RiskManager,
         execution_provider: ExecutionProvider,
+        market_data_provider: MarketDataProvider | None = None,
         portfolio: PortfolioService | None = None,
         default_quantity: Decimal = Decimal("0.01"),
     ) -> None:
         self.strategy_service = strategy_service
         self.risk_manager = risk_manager
         self.execution_provider = execution_provider
+        self.market_data_provider = market_data_provider
         self.portfolio = portfolio or PortfolioService(
             balance=Decimal(10000),
         )
@@ -60,6 +62,23 @@ class DefaultTradingEngine(TradingEngine):
             signal,
             market_state,
         )
+
+    async def process_symbol(
+        self,
+        symbol: str,
+    ) -> Order | None:
+        """Fetch market state for a symbol and process it."""
+
+        if self.market_data_provider is None:
+            raise RuntimeError(
+                "Market data provider is not configured"
+            )
+
+        market_state = await self.market_data_provider.get_market_state(
+            symbol
+        )
+
+        return await self.process_market_state(market_state)
 
     async def execute_signal(
         self,
@@ -207,4 +226,3 @@ class DefaultTradingEngine(TradingEngine):
             if signal.direction.value == "long"
             else OrderSide.SELL
         )
-
