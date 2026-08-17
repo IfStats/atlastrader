@@ -9,6 +9,7 @@ from packages.core.enums import Timeframe
 from packages.core.models import Candle, Quote
 from packages.market_data.base import MarketDataProvider
 from packages.market_data.cache import MarketDataCache
+from packages.market_data.indicators import MarketIndicators
 from packages.market_data.service import MarketDataService
 
 
@@ -17,44 +18,49 @@ def make_provider() -> AsyncMock:
 
 
 def make_candles(
-    *,
     symbol: str = "XAUUSD",
     timeframe: Timeframe = Timeframe.M5,
+    count: int = 20,
 ) -> list[Candle]:
-    base_time = datetime.now(UTC) - timedelta(minutes=20)
+    timeframe_minutes = {
+        Timeframe.M1: 1,
+        Timeframe.M5: 5,
+        Timeframe.M15: 15,
+        Timeframe.M30: 30,
+        Timeframe.H1: 60,
+        Timeframe.H4: 240,
+        Timeframe.D1: 1440,
+    }
 
-    return [
-        Candle(
-            symbol=symbol,
-            timeframe=timeframe,
-            timestamp=base_time,
-            open=Decimal(3340),
-            high=Decimal(3346),
-            low=Decimal(3338),
-            close=Decimal(3345),
-            volume=Decimal(1000),
-        ),
-        Candle(
-            symbol=symbol,
-            timeframe=timeframe,
-            timestamp=base_time + timedelta(minutes=5),
-            open=Decimal(3345),
-            high=Decimal(3351),
-            low=Decimal(3343),
-            close=Decimal(3350),
-            volume=Decimal(1100),
-        ),
-        Candle(
-            symbol=symbol,
-            timeframe=timeframe,
-            timestamp=base_time + timedelta(minutes=10),
-            open=Decimal(3350),
-            high=Decimal(3357),
-            low=Decimal(3348),
-            close=Decimal(3355),
-            volume=Decimal(1200),
-        ),
-    ]
+    minutes = timeframe_minutes[timeframe]
+
+    timestamp = datetime.now(UTC) - timedelta(
+        minutes=(count - 1) * minutes,
+    )
+
+    candles: list[Candle] = []
+
+    for index in range(count):
+        candle_timestamp = timestamp + timedelta(
+            minutes=index * minutes,
+        )
+
+        base_price = Decimal(3330) + Decimal(index * 5)
+
+        candles.append(
+            Candle(
+                symbol=symbol,
+                timeframe=timeframe,
+                timestamp=candle_timestamp,
+                open=base_price,
+                high=base_price + Decimal(6),
+                low=base_price - Decimal(2),
+                close=base_price + Decimal(5),
+                volume=Decimal(1000 + index * 100),
+            )
+        )
+
+    return candles
 
 
 @pytest.mark.asyncio
@@ -204,38 +210,62 @@ async def test_get_market_state_calculates_expected_indicators() -> None:
         timestamp=timestamp,
     )
 
-    candles = [
-        Candle(
-            symbol="XAUUSD",
-            timeframe=Timeframe.M5,
-            timestamp=timestamp - timedelta(minutes=15),
-            open=Decimal(3340),
-            high=Decimal(3346),
-            low=Decimal(3338),
-            close=Decimal(3345),
-            volume=Decimal(1000),
-        ),
-        Candle(
-            symbol="XAUUSD",
-            timeframe=Timeframe.M5,
-            timestamp=timestamp - timedelta(minutes=10),
-            open=Decimal(3345),
-            high=Decimal(3351),
-            low=Decimal(3343),
-            close=Decimal(3350),
-            volume=Decimal(1100),
-        ),
-        Candle(
-            symbol="XAUUSD",
-            timeframe=Timeframe.M5,
-            timestamp=timestamp - timedelta(minutes=5),
-            open=Decimal(3350),
-            high=Decimal(3357),
-            low=Decimal(3348),
-            close=Decimal(3355),
-            volume=Decimal(1200),
-        ),
-    ]
+    candles: list[Candle] = []
+
+    for index in range(17):
+        candle_timestamp = timestamp - timedelta(
+            minutes=(20 - index) * 5,
+        )
+
+        base_price = Decimal(3330) + Decimal(index * 2)
+
+        candles.append(
+            Candle(
+                symbol="XAUUSD",
+                timeframe=Timeframe.M5,
+                timestamp=candle_timestamp,
+                open=base_price,
+                high=base_price + Decimal(6),
+                low=base_price - Decimal(2),
+                close=base_price + Decimal(4),
+                volume=Decimal(1000 + index * 100),
+            )
+        )
+
+    candles.extend(
+        [
+            Candle(
+                symbol="XAUUSD",
+                timeframe=Timeframe.M5,
+                timestamp=timestamp - timedelta(minutes=15),
+                open=Decimal(3340),
+                high=Decimal(3346),
+                low=Decimal(3338),
+                close=Decimal(3345),
+                volume=Decimal(1000),
+            ),
+            Candle(
+                symbol="XAUUSD",
+                timeframe=Timeframe.M5,
+                timestamp=timestamp - timedelta(minutes=10),
+                open=Decimal(3345),
+                high=Decimal(3351),
+                low=Decimal(3343),
+                close=Decimal(3350),
+                volume=Decimal(1100),
+            ),
+            Candle(
+                symbol="XAUUSD",
+                timeframe=Timeframe.M5,
+                timestamp=timestamp - timedelta(minutes=5),
+                open=Decimal(3350),
+                high=Decimal(3357),
+                low=Decimal(3348),
+                close=Decimal(3355),
+                volume=Decimal(1200),
+            ),
+        ]
+    )
 
     provider.get_candles.return_value = candles
 
@@ -247,21 +277,36 @@ async def test_get_market_state_calculates_expected_indicators() -> None:
 
     state = await service.get_market_state("XAUUSD")
 
+    assert state.symbol == "XAUUSD"
+    assert state.timeframe == Timeframe.M5
+    assert state.price == Decimal("3350.35")
+    assert state.spread == Decimal("0.20")
+    assert state.volatility > Decimal(0)
+
     assert state.trend_score == pytest.approx(
-        0.0298953662,
-        rel=1e-5,
+        MarketIndicators.trend_score(candles)
     )
+    assert state.momentum_score == pytest.approx(
+        MarketIndicators.momentum_score(candles)
+    )
+    assert state.volatility_score == pytest.approx(
+        MarketIndicators.volatility_score(candles)
+    )
+
+    assert state.trend_score == pytest.approx(
+       0.0629874025,
+       rel=1e-5,
+    )
+    
     assert state.momentum_score == pytest.approx(
         0.1492537,
         rel=1e-5,
     )
     assert state.volatility_score == pytest.approx(
-        0.2487562,
+        0.2402985075,
         rel=1e-3,
     )
-    assert state.volatility == (
-        Decimal(8) + Decimal(8) + Decimal(9)
-    ) / Decimal(3)
+    assert state.volatility == Decimal("8.05")
 
 
 @pytest.mark.asyncio
@@ -293,6 +338,7 @@ async def test_get_market_state_requests_exact_candle_window() -> None:
         timestamp - timedelta(minutes=100),
         timestamp,
     )
+
 
 @pytest.mark.asyncio
 async def test_get_market_state_uses_cached_quote_and_candles() -> None:
@@ -348,7 +394,7 @@ async def test_get_market_state_refreshes_expired_quote() -> None:
     provider.get_candles.return_value = make_candles()
 
     cache = MarketDataCache(
-        quote_ttl=timedelta(0, microseconds=1),
+        quote_ttl=timedelta(microseconds=1),
         candle_ttl=timedelta(minutes=1),
     )
 
@@ -365,4 +411,3 @@ async def test_get_market_state_refreshes_expired_quote() -> None:
     await service.get_market_state("XAUUSD")
 
     assert provider.get_quote.await_count == 2
-

@@ -22,6 +22,7 @@ class MarketDataCache:
         *,
         quote_ttl: timedelta = timedelta(seconds=2),
         candle_ttl: timedelta = timedelta(seconds=30),
+        quote_max_age: timedelta = timedelta(seconds=5),
     ) -> None:
         if quote_ttl <= timedelta(0):
             raise ValueError("quote_ttl must be greater than zero")
@@ -29,8 +30,12 @@ class MarketDataCache:
         if candle_ttl <= timedelta(0):
             raise ValueError("candle_ttl must be greater than zero")
 
+        if quote_max_age <= timedelta(0):
+            raise ValueError("quote_max_age must be greater than zero")
+
         self.quote_ttl = quote_ttl
         self.candle_ttl = candle_ttl
+        self.quote_max_age = quote_max_age
 
         self._quotes: dict[str, CacheEntry[Quote]] = {}
         self._candles: dict[
@@ -51,14 +56,22 @@ class MarketDataCache:
         )
 
     def get_quote(self, symbol: str) -> Quote | None:
-        """Return a cached quote if it has not expired."""
+        """Return a cached quote if it has not expired or gone stale."""
 
         entry = self._quotes.get(symbol)
 
         if entry is None:
             return None
 
-        if self._now() >= entry.expires_at:
+        now = self._now()
+
+        if now >= entry.expires_at:
+            del self._quotes[symbol]
+            return None
+
+        quote_age = now - entry.value.timestamp
+
+        if quote_age > self.quote_max_age:
             del self._quotes[symbol]
             return None
 

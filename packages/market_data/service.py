@@ -53,12 +53,23 @@ class MarketDataService:
                 start,
                 end,
             )
+            self._validate_candles(
+                candles,
+                symbol,
+                self.timeframe,
+            )
             self.cache.set_candles(
                 symbol,
                 self.timeframe,
                 start,
                 end,
                 candles,
+            )
+        else:
+            self._validate_candles(
+                candles,
+                symbol,
+                self.timeframe,
             )
 
         trend_score = MarketIndicators.trend_score(candles)
@@ -101,6 +112,61 @@ class MarketDataService:
         return end - timedelta(
             minutes=minutes * self.candle_lookback,
         )
+
+    def _validate_candles(
+        self,
+        candles: list[Candle],
+        symbol: str,
+        timeframe: Timeframe,
+    ) -> None:
+        """Validate the provider's historical candle series."""
+
+        if len(candles) < self.candle_lookback:
+            raise ValueError(
+                "Insufficient candles: "
+                f"expected at least {self.candle_lookback}, "
+                f"received {len(candles)}"
+            )
+
+        previous_timestamp: datetime | None = None
+
+        for candle in candles:
+            if candle.symbol != symbol:
+                raise ValueError(
+                    "Candle symbol does not match requested symbol"
+                )
+
+            if candle.timeframe != timeframe:
+                raise ValueError(
+                    "Candle timeframe does not match requested timeframe"
+                )
+
+            if (
+                previous_timestamp is not None
+                and candle.timestamp <= previous_timestamp
+            ):
+                raise ValueError(
+                    "Candle timestamps must be strictly increasing"
+                )
+
+            if candle.high < candle.low:
+                raise ValueError(
+                    "Candle high must be greater than or equal to low"
+                )
+
+            if candle.high < candle.open or candle.high < candle.close:
+                raise ValueError(
+                    "Candle high must be greater than or equal to "
+                    "open and close"
+                )
+
+            if candle.low > candle.open or candle.low > candle.close:
+                raise ValueError(
+                    "Candle low must be less than or equal to "
+                    "open and close"
+                )
+
+            previous_timestamp = candle.timestamp
 
     @staticmethod
     def _calculate_volatility(
