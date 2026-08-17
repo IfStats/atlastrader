@@ -9,10 +9,20 @@ from packages.risk.interfaces import RiskManager
 class DefaultRiskManager(RiskManager):
     """Default risk-management implementation for AtlasTrader."""
 
-    _DEFAULT_ACCOUNT_BALANCE = Decimal(10000)
+    _DEFAULT_ACCOUNT_EQUITY = Decimal(10000)
 
     def __init__(self, settings: RiskSettings) -> None:
         self.settings = settings
+
+    def _get_equity(
+        self,
+        portfolio: PortfolioSnapshot | None,
+    ) -> Decimal:
+        """Return current account equity, with a test/default fallback."""
+        if portfolio is not None:
+            return portfolio.equity
+
+        return self._DEFAULT_ACCOUNT_EQUITY
 
     def can_trade(
         self,
@@ -27,9 +37,10 @@ class DefaultRiskManager(RiskManager):
         if not self.settings.trading_enabled:
             return False
 
+        account_equity = self._get_equity(portfolio)
+
         max_daily_loss = (
-            self._DEFAULT_ACCOUNT_BALANCE
-            * self.settings.max_daily_loss
+            account_equity * self.settings.max_daily_loss
         )
 
         if daily_loss <= -max_daily_loss:
@@ -49,7 +60,7 @@ class DefaultRiskManager(RiskManager):
             return False
 
         max_exposure = (
-            self._DEFAULT_ACCOUNT_BALANCE
+            account_equity
             * self.settings.max_portfolio_exposure
         )
 
@@ -87,6 +98,8 @@ class DefaultRiskManager(RiskManager):
         if market_state.spread > self.settings.max_spread:
             return False
 
+        account_equity = self._get_equity(portfolio)
+
         if portfolio is not None:
             open_positions = portfolio.open_positions
             current_exposure = portfolio.total_exposure
@@ -101,7 +114,7 @@ class DefaultRiskManager(RiskManager):
             return False
 
         max_exposure = (
-            self._DEFAULT_ACCOUNT_BALANCE
+            account_equity
             * self.settings.max_portfolio_exposure
         )
 
@@ -131,6 +144,8 @@ class DefaultRiskManager(RiskManager):
         if order.quantity <= Decimal(0):
             return False
 
+        account_equity = self._get_equity(portfolio)
+
         if portfolio is not None:
             open_positions = portfolio.open_positions
             current_exposure = portfolio.total_exposure
@@ -145,7 +160,7 @@ class DefaultRiskManager(RiskManager):
             return False
 
         max_exposure = (
-            self._DEFAULT_ACCOUNT_BALANCE
+            account_equity
             * self.settings.max_portfolio_exposure
         )
 
@@ -165,5 +180,3 @@ class DefaultRiskManager(RiskManager):
                 return False
 
         return True
-
-  
