@@ -10,6 +10,7 @@ from packages.engine.service import DefaultTradingEngine
 from packages.execution.mock import MockExecutionProvider
 from packages.portfolio.service import PortfolioService
 from packages.risk.manager import DefaultRiskManager
+from packages.risk.position_sizer import DefaultPositionSizer
 from packages.strategy.momentum import MomentumStrategy
 from packages.strategy.service import StrategyService
 
@@ -51,19 +52,27 @@ def make_engine(
     *,
     max_open_positions: int = 5,
 ) -> DefaultTradingEngine:
-    strategy_service = StrategyService(
-    [MomentumStrategy()]
-)
-
-    risk_manager = DefaultRiskManager(
-        RiskSettings(
-            trading_enabled=True,
-            max_open_positions=max_open_positions,
-        )
+    settings = RiskSettings(
+        trading_enabled=True,
+        max_risk_per_trade=Decimal("0.01"),
+        max_daily_loss=Decimal("0.03"),
+        max_open_positions=max_open_positions,
+        max_portfolio_exposure=Decimal("0.50"),
+        min_risk_reward_ratio=Decimal("1.5"),
+        max_spread=Decimal("5.0"),
     )
 
+    strategy_service = StrategyService(
+        [MomentumStrategy()]
+    )
+
+    risk_manager = DefaultRiskManager(settings)
+
     execution_provider = MockExecutionProvider(
-        instruments={"XAUUSD": make_instrument()},
+        balance=Decimal(10000),
+        instruments={
+            "XAUUSD": make_instrument(),
+        },
     )
 
     portfolio = PortfolioService(
@@ -71,9 +80,11 @@ def make_engine(
     )
 
     return DefaultTradingEngine(
-    strategy_service=strategy_service,
+        strategy_service=strategy_service,
         risk_manager=risk_manager,
         execution_provider=execution_provider,
+        position_sizer=DefaultPositionSizer(),
+        risk_settings=settings,
         portfolio=portfolio,
     )
 
@@ -96,7 +107,11 @@ async def test_filled_order_creates_portfolio_position() -> None:
     assert position is not None
     assert position.symbol == "XAUUSD"
     assert position.side is OrderSide.BUY
-    assert position.quantity == Decimal("0.01")
+
+    # $10,000 equity × 1% risk = $100 risk.
+    # $5 stop distance × 100 contract size = $500 risk per lot.
+    # $100 / $500 = 0.20 lots.
+    assert position.quantity == Decimal("0.20")
     assert position.entry_price == Decimal(3350)
 
 
@@ -154,7 +169,8 @@ async def test_portfolio_position_has_correct_exposure() -> None:
     snapshot = engine.portfolio.snapshot()
 
     assert snapshot.open_positions == 1
-    assert snapshot.total_exposure == Decimal("33.50")
+    assert snapshot.total_exposure == Decimal("670.00")
+
 
 @pytest.mark.asyncio
 async def test_engine_records_filled_buy_order_in_portfolio() -> None:
@@ -163,7 +179,6 @@ async def test_engine_records_filled_buy_order_in_portfolio() -> None:
     )
 
     engine = make_engine()
-
     engine.portfolio = portfolio
 
     await engine.execution_provider.connect()
@@ -183,6 +198,7 @@ async def test_engine_records_filled_buy_order_in_portfolio() -> None:
     assert position.entry_price == order.price
     assert position.current_price == order.price
 
+
 @pytest.mark.asyncio
 async def test_engine_portfolio_snapshot_reflects_filled_order() -> None:
     portfolio = PortfolioService(
@@ -199,6 +215,7 @@ async def test_engine_portfolio_snapshot_reflects_filled_order() -> None:
     order = await engine.process_market_state(market_state)
 
     assert order is not None
+    assert order.price is not None
 
     snapshot = portfolio.snapshot()
 

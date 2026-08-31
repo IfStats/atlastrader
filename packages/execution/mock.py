@@ -80,6 +80,15 @@ class MockExecutionProvider(ExecutionProvider):
     async def get_position(self, symbol: str) -> Position | None:
         return self._positions.get(symbol)
 
+    async def get_positions(self) -> list[Position]:
+        """Return all current open positions."""
+
+        return [
+            position
+            for position in self._positions.values()
+            if position.status is PositionStatus.OPEN
+        ]
+
     async def close_position(self, symbol: str) -> Position:
         if symbol not in self._positions:
             raise KeyError(f"Position not found: {symbol}")

@@ -9,6 +9,19 @@ from packages.market_data.base import MarketDataProvider
 class MockMarketDataProvider(MarketDataProvider):
     """Deterministic market-data provider for development and tests."""
 
+    def __init__(self) -> None:
+        self._connected = False
+
+    async def connect(self) -> None:
+        """Connect the mock market-data provider."""
+
+        self._connected = True
+
+    async def disconnect(self) -> None:
+        """Disconnect the mock market-data provider."""
+
+        self._connected = False
+
     async def get_quote(self, symbol: str) -> Quote:
         return Quote(
             symbol=symbol,

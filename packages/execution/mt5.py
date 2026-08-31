@@ -34,6 +34,9 @@ class MT5ExecutionProvider(ExecutionProvider):
     async def connect(self) -> None:
         """Initialize and connect to the MetaTrader 5 terminal."""
 
+        if self._connected:
+            return
+
         kwargs: dict[str, object] = {}
 
         if self.login is not None:
@@ -372,3 +375,56 @@ class MT5ExecutionProvider(ExecutionProvider):
             return 0
 
         return max(0, -exponent)
+
+    async def get_positions(self) -> list[Position]:
+        """Return all current MT5 positions."""
+
+        self._require_connection()
+
+        positions = mt5.positions_get()
+
+        if positions is None:
+            raise RuntimeError(
+                f"Unable to retrieve positions: {mt5.last_error()}"
+            )
+
+        result: list[Position] = []
+
+        for position in positions:
+            side = (
+                OrderSide.BUY
+                if position.type == mt5.POSITION_TYPE_BUY
+                else OrderSide.SELL
+            )
+
+            result.append(
+                Position(
+                    symbol=position.symbol,
+                    side=side,
+                    status=PositionStatus.OPEN,
+                    quantity=Decimal(str(position.volume)),
+                    entry_price=Decimal(str(position.price_open)),
+                    current_price=Decimal(
+                        str(position.price_current)
+                    ),
+                    stop_loss=(
+                        Decimal(str(position.sl))
+                        if position.sl
+                        else None
+                    ),
+                    take_profit=(
+                        Decimal(str(position.tp))
+                        if position.tp
+                        else None
+                    ),
+                    opened_at=datetime.fromtimestamp(
+                        position.time,
+                        tz=UTC,
+                    ),
+                    closed_at=None,
+                    realized_pnl=Decimal(0),
+                    unrealized_pnl=Decimal(str(position.profit)),
+                )
+            )
+
+        return result

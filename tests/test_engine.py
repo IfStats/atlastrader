@@ -10,7 +10,9 @@ from packages.core.models import Instrument, MarketState, Signal
 from packages.engine.service import DefaultTradingEngine
 from packages.execution.mock import MockExecutionProvider
 from packages.market_data.base import MarketDataProvider
+from packages.portfolio.service import PortfolioService
 from packages.risk.manager import DefaultRiskManager
+from packages.risk.position_sizer import DefaultPositionSizer
 from packages.strategy.momentum import MomentumStrategy
 from packages.strategy.service import StrategyService
 
@@ -54,26 +56,47 @@ def make_market_state(
     )
 
 
+def make_settings() -> RiskSettings:
+    return RiskSettings(
+        trading_enabled=True,
+        max_risk_per_trade=Decimal("0.01"),
+        max_daily_loss=Decimal("0.03"),
+        max_open_positions=5,
+        max_portfolio_exposure=Decimal("0.50"),
+        min_risk_reward_ratio=Decimal("1.5"),
+        max_spread=Decimal("5.0"),
+    )
+
+
 def make_engine(
     *,
     market_data_provider: MarketDataProvider | None = None,
 ) -> DefaultTradingEngine:
+    settings = make_settings()
+
     strategy_service = StrategyService(
         [MomentumStrategy()]
     )
 
-    risk_manager = DefaultRiskManager(
-        RiskSettings(trading_enabled=True)
-    )
+    risk_manager = DefaultRiskManager(settings)
 
     execution_provider = MockExecutionProvider(
-        instruments={"XAUUSD": make_instrument()}
+        instruments={
+            "XAUUSD": make_instrument(),
+        }
+    )
+
+    portfolio = PortfolioService(
+        balance=Decimal(10000),
     )
 
     return DefaultTradingEngine(
         strategy_service=strategy_service,
         risk_manager=risk_manager,
         execution_provider=execution_provider,
+        position_sizer=DefaultPositionSizer(),
+        risk_settings=settings,
+        portfolio=portfolio,
         market_data_provider=market_data_provider,
     )
 
@@ -145,22 +168,31 @@ async def test_engine_creates_and_executes_order() -> None:
 
 @pytest.mark.asyncio
 async def test_engine_rejects_signal_before_execution_when_risk_denies() -> None:
+    settings = make_settings()
+
     strategy_service = StrategyService(
         [MomentumStrategy()]
     )
 
-    risk_manager = RejectingRiskManager(
-        RiskSettings(trading_enabled=True)
-    )
+    risk_manager = RejectingRiskManager(settings)
 
     execution_provider = MockExecutionProvider(
-        instruments={"XAUUSD": make_instrument()}
+        instruments={
+            "XAUUSD": make_instrument(),
+        }
+    )
+
+    portfolio = PortfolioService(
+        balance=Decimal(10000),
     )
 
     engine = DefaultTradingEngine(
         strategy_service=strategy_service,
         risk_manager=risk_manager,
         execution_provider=execution_provider,
+        position_sizer=DefaultPositionSizer(),
+        risk_settings=settings,
+        portfolio=portfolio,
     )
 
     await execution_provider.connect()
@@ -174,14 +206,19 @@ async def test_engine_rejects_signal_before_execution_when_risk_denies() -> None
 
 @pytest.mark.asyncio
 async def test_engine_rejects_order_when_execution_instrument_is_missing() -> None:
+    settings = make_settings()
+
     engine = DefaultTradingEngine(
         strategy_service=StrategyService(
             [MomentumStrategy()]
         ),
-        risk_manager=DefaultRiskManager(
-            RiskSettings(trading_enabled=True)
-        ),
+        risk_manager=DefaultRiskManager(settings),
         execution_provider=MockExecutionProvider(),
+        position_sizer=DefaultPositionSizer(),
+        risk_settings=settings,
+        portfolio=PortfolioService(
+            balance=Decimal(10000),
+        ),
     )
 
     await engine.execution_provider.connect()
@@ -241,7 +278,7 @@ async def test_engine_process_symbol_requires_market_data_provider() -> None:
 
     with pytest.raises(
         RuntimeError,
-        match="Market data provider is not configured",
+        match="Market data provider is required",
     ):
         await engine.process_symbol("XAUUSD")
 
@@ -265,24 +302,3 @@ async def test_engine_process_symbol_propagates_market_data_error() -> None:
         await engine.process_symbol("XAUUSD")
 
     provider.get_market_state.assert_awaited_once_with("XAUUSD")
-
-
-def test_build_market_state() -> None:
-    engine = make_engine()
-
-    state = engine.build_market_state(
-        symbol="XAUUSD",
-        timeframe=Timeframe.M5,
-        price=Decimal(3350),
-        trend_score=0.80,
-        momentum_score=0.80,
-        volatility_score=0.50,
-        volatility=Decimal(5),
-        spread=Decimal("0.20"),
-        is_tradeable=True,
-    )
-
-    assert state.symbol == "XAUUSD"
-    assert state.timeframe is Timeframe.M5
-    assert state.price == Decimal(3350)
-    assert state.is_tradeable is True

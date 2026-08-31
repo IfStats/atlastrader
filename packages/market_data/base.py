@@ -9,6 +9,16 @@ class MarketDataProvider(ABC):
     """Abstract interface for market-data providers."""
 
     @abstractmethod
+    async def connect(self) -> None:
+        """Connect to the market-data venue."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def disconnect(self) -> None:
+        """Disconnect from the market-data venue."""
+        raise NotImplementedError
+
+    @abstractmethod
     async def get_quote(self, symbol: str) -> Quote:
         """Fetch the latest quote for a symbol."""
         raise NotImplementedError
@@ -38,12 +48,7 @@ class MarketDataProvider(ABC):
         self,
         symbol: str,
     ) -> MarketState:
-        """Fetch the normalized current market state.
-
-        Providers that expose normalized market-state retrieval can
-        override this method. The base implementation remains concrete
-        so existing market-data providers are not forced to implement it.
-        """
+        """Fetch the normalized current market state."""
         raise NotImplementedError(
             "This market-data provider does not implement "
             "get_market_state"

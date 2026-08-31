@@ -18,6 +18,7 @@ class TradingEngine(ABC):
     async def execute_signal(
         self,
         signal: Signal,
+        market_state: MarketState | None = None,
     ) -> Order | None:
         """Validate and execute an approved trading signal."""
         raise NotImplementedError

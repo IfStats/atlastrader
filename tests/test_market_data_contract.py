@@ -13,8 +13,10 @@ def test_mt5_provider_implements_market_data_provider() -> None:
 
 def test_market_data_provider_is_abstract() -> None:
     assert MarketDataProvider.__abstractmethods__ == {
-        "get_quote",
-        "get_candles",
-        "subscribe_quotes",
-        "unsubscribe_quotes",
-    }
+    "connect",
+    "disconnect",
+    "get_quote",
+    "get_candles",
+    "subscribe_quotes",
+    "unsubscribe_quotes",
+}

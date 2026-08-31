@@ -40,3 +40,8 @@ class ExecutionProvider(ABC):
     async def get_position(self, symbol: str) -> Position | None:
         """Return the current position for an instrument."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def get_positions(self) -> list[Position]:
+        """Return all current positions from the execution venue."""
+        raise NotImplementedError

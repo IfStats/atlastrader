@@ -48,3 +48,72 @@ class RiskSettings(BaseSettings):
     )
 
     trading_enabled: bool = False
+
+
+class MT5Settings(BaseSettings):
+    """MetaTrader 5 connection configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="MT5_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    login: int | None = None
+    password: str | None = None
+    server: str | None = None
+    path: str | None = None
+
+    def has_credentials(self) -> bool:
+        """Return whether explicit MT5 credentials are configured."""
+
+        return (
+            self.login is not None
+            and bool(self.password)
+            and bool(self.server)
+        )
+
+
+class RuntimeSettings(BaseSettings):
+    """AtlasTrader application runtime configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="ATLAS_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    symbols: str = "XAUUSD"
+
+    initial_balance: Decimal = Field(
+        default=Decimal(0),
+        ge=0,
+    )
+
+    scan_interval_seconds: float = Field(
+        default=5.0,
+        gt=0,
+    )
+
+    timeframe: str = "M5"
+
+    candle_lookback: int = Field(
+        default=20,
+        ge=2,
+    )
+
+    def get_symbols(self) -> list[str]:
+        """Return normalized, deduplicated trading symbols."""
+
+        symbols = [
+            symbol.strip().upper()
+            for symbol in self.symbols.split(",")
+            if symbol.strip()
+        ]
+
+        if not symbols:
+            raise ValueError(
+                "No trading symbols configured"
+            )
+
+        return list(dict.fromkeys(symbols))
