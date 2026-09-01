@@ -296,7 +296,6 @@ async def test_get_position_returns_none_when_no_position_exists() -> None:
 
     assert position is None
 
-
 @pytest.mark.asyncio
 async def test_submit_order_rejects_quantity_not_aligned_to_volume_step() -> None:
     provider = make_provider()
@@ -389,3 +388,58 @@ async def test_submit_order_accepts_quantity_aligned_to_volume_step() -> None:
         submitted = await provider.submit_order(order)
 
     assert submitted.status is OrderStatus.FILLED
+
+@pytest.mark.asyncio
+async def test_submit_order_continues_when_no_existing_position() -> None:
+    provider = make_provider()
+    order = make_order()
+
+    info = MagicMock()
+    info.name = "XAUUSD"
+    info.path = "Forex\\Metals"
+    info.trade_tick_size = 0.01
+    info.trade_contract_size = 100.0
+    info.volume_min = 0.01
+    info.volume_max = 100.0
+    info.volume_step = 0.01
+    info.digits = 2
+    info.visible = True
+    info.currency_profit = "USD"
+    info.filling_mode = 0
+
+    tick = MagicMock()
+    tick.ask = 3350.25
+    tick.bid = 3350.05
+
+    result = MagicMock()
+    result.retcode = mt5.TRADE_RETCODE_DONE
+    result.price = 3350.25
+
+    with (
+        patch(
+            "packages.execution.mt5.mt5.terminal_info",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "packages.execution.mt5.mt5.symbol_info",
+            return_value=info,
+        ),
+        patch(
+            "packages.execution.mt5.mt5.positions_get",
+            return_value=[],
+        ),
+        patch(
+            "packages.execution.mt5.mt5.symbol_info_tick",
+            return_value=tick,
+        ),
+        patch(
+            "packages.execution.mt5.mt5.order_send",
+            return_value=result,
+        ) as order_send,
+    ):
+        provider._connected = True
+
+        submitted = await provider.submit_order(order)
+
+    assert submitted.status is OrderStatus.FILLED
+    order_send.assert_called_once()

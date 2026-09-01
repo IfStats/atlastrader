@@ -93,8 +93,6 @@ def test_runtime_requires_symbols() -> None:
             scanner=scanner,
             symbols=[],
         )
-
-
 @pytest.mark.asyncio
 async def test_runtime_starts() -> None:
     (

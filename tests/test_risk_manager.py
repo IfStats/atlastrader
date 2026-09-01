@@ -6,11 +6,13 @@ from packages.core.enums import (
     OrderSide,
     OrderStatus,
     OrderType,
+    PositionStatus,
     SignalDirection,
     StrategyType,
     Timeframe,
 )
-from packages.core.models import MarketState, Order, Signal
+from packages.core.models import MarketState, Order, Position, Signal
+from packages.portfolio.service import PortfolioService
 from packages.risk.manager import DefaultRiskManager
 
 
@@ -155,3 +157,42 @@ def test_signal_approved_when_portfolio_exposure_is_within_limit() -> None:
         )
         is True
     )
+
+def test_signal_rejected_when_symbol_already_has_position() -> None:
+    manager = DefaultRiskManager(make_settings())
+
+    portfolio = PortfolioService(
+        balance=Decimal(10000),
+    )
+
+    position = Position(
+        symbol="XAUUSD",
+        side=OrderSide.BUY,
+        status=PositionStatus.OPEN,
+        quantity=Decimal("0.10"),
+        entry_price=Decimal(3350),
+        current_price=Decimal(3350),
+        opened_at=datetime.now(UTC),
+    )
+
+    portfolio.add_position(position)
+
+    signal = make_signal()
+    market_state = make_market_state()
+
+    assert manager.approve_signal(
+        signal,
+        market_state,
+        portfolio.snapshot(),
+    ) is False
+
+    portfolio.add_position(position)
+
+    signal = make_signal()
+    market_state = make_market_state()
+
+    assert manager.approve_signal(
+        signal,
+        market_state,
+        portfolio.snapshot(),
+    ) is False

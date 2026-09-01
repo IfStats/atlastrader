@@ -183,10 +183,15 @@ class PortfolioService:
         equity = self._balance + realized_pnl + unrealized_pnl
 
         return PortfolioSnapshot(
-            balance=self._balance,
-            equity=equity,
-            realized_pnl=realized_pnl,
-            unrealized_pnl=unrealized_pnl,
-            open_positions=len(positions),
-            total_exposure=total_exposure,
-        )
+    balance=self._balance,
+    equity=equity,
+    realized_pnl=realized_pnl,
+    unrealized_pnl=unrealized_pnl,
+    open_positions=len(positions),
+    total_exposure=total_exposure,
+    open_symbols=tuple(
+        position.symbol
+        for position in positions
+        if position.status is PositionStatus.OPEN
+    ),
+)

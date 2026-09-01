@@ -28,6 +28,7 @@ class MT5PositionRecord(Protocol):
     tp: float
     profit: float
 
+
 class MT5ExecutionProvider(ExecutionProvider):
     """MetaTrader 5 execution provider for AtlasTrader."""
 
@@ -192,7 +193,7 @@ class MT5ExecutionProvider(ExecutionProvider):
                 f"Instrument is not enabled: {order.symbol}"
             )
 
-            self._validate_order_levels(order)
+        self._validate_order_levels(order)
 
         quantity = order.quantity
 
@@ -223,7 +224,7 @@ class MT5ExecutionProvider(ExecutionProvider):
             raise RuntimeError(
                 f"Unable to retrieve tick data: {order.symbol}"
             )
-        
+
         if order.side is OrderSide.BUY:
             mt5_order_type = mt5.ORDER_TYPE_BUY
             price = Decimal(str(tick.ask))

@@ -16,6 +16,8 @@ class PortfolioSnapshot(BaseModel):
 
     total_exposure: Decimal = Decimal(0)
 
+    open_symbols: tuple[str, ...] = ()
+
     @property
     def net_pnl(self) -> Decimal:
         return self.realized_pnl + self.unrealized_pnl

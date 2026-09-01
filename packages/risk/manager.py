@@ -19,6 +19,7 @@ class DefaultRiskManager(RiskManager):
         portfolio: PortfolioSnapshot | None,
     ) -> Decimal:
         """Return current account equity, with a test/default fallback."""
+
         if portfolio is not None:
             return portfolio.equity
 
@@ -40,7 +41,8 @@ class DefaultRiskManager(RiskManager):
         account_equity = self._get_equity(portfolio)
 
         max_daily_loss = (
-            account_equity * self.settings.max_daily_loss
+            account_equity
+            * self.settings.max_daily_loss
         )
 
         if daily_loss <= -max_daily_loss:
@@ -93,6 +95,12 @@ class DefaultRiskManager(RiskManager):
             return False
 
         if signal.take_profit is None:
+            return False
+
+        if (
+            portfolio is not None
+            and signal.symbol in portfolio.open_symbols
+        ):
             return False
 
         if market_state.spread > self.settings.max_spread:
