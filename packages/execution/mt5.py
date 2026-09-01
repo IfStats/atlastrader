@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Protocol
 
 import MetaTrader5 as mt5  # type: ignore[import-untyped]
 
@@ -14,8 +15,25 @@ from packages.core.models import Instrument, Order, Position
 from packages.execution.interfaces import ExecutionProvider
 
 
+class MT5PositionRecord(Protocol):
+    """Fields required from an MT5 position record."""
+
+    type: int
+    time: int
+    symbol: str
+    volume: float
+    price_open: float
+    price_current: float
+    sl: float
+    tp: float
+    profit: float
+
 class MT5ExecutionProvider(ExecutionProvider):
     """MetaTrader 5 execution provider for AtlasTrader."""
+
+    MAGIC_NUMBER = 260815
+    COMMENT = "AtlasTrader"
+    DEVIATION = 20
 
     def __init__(
         self,
@@ -90,7 +108,7 @@ class MT5ExecutionProvider(ExecutionProvider):
 
         if account is None:
             raise RuntimeError(
-                f"Unable to retrieve MT5 account information: "
+                "Unable to retrieve MT5 account information: "
                 f"{mt5.last_error()}"
             )
 
@@ -158,7 +176,7 @@ class MT5ExecutionProvider(ExecutionProvider):
         )
 
     async def submit_order(self, order: Order) -> Order:
-        """Submit a market order to MetaTrader 5."""
+        """Validate and submit a market order to MetaTrader 5."""
 
         self._require_connection()
 
@@ -174,24 +192,28 @@ class MT5ExecutionProvider(ExecutionProvider):
                 f"Instrument is not enabled: {order.symbol}"
             )
 
-        if order.quantity < instrument.min_volume:
+            self._validate_order_levels(order)
+
+        quantity = order.quantity
+
+        if quantity < instrument.min_volume:
             raise ValueError(
-                f"Order quantity {order.quantity} is below "
+                f"Order quantity {quantity} is below "
                 f"minimum volume {instrument.min_volume}"
             )
 
         if (
             instrument.max_volume is not None
-            and order.quantity > instrument.max_volume
+            and quantity > instrument.max_volume
         ):
             raise ValueError(
-                f"Order quantity {order.quantity} exceeds "
+                f"Order quantity {quantity} exceeds "
                 f"maximum volume {instrument.max_volume}"
             )
 
-        if order.quantity % instrument.volume_step != 0:
+        if quantity % instrument.volume_step != 0:
             raise ValueError(
-                f"Order quantity {order.quantity} must be aligned "
+                f"Order quantity {quantity} must be aligned "
                 f"with volume step {instrument.volume_step}"
             )
 
@@ -201,18 +223,25 @@ class MT5ExecutionProvider(ExecutionProvider):
             raise RuntimeError(
                 f"Unable to retrieve tick data: {order.symbol}"
             )
-
+        
         if order.side is OrderSide.BUY:
             mt5_order_type = mt5.ORDER_TYPE_BUY
             price = Decimal(str(tick.ask))
-        else:
+        elif order.side is OrderSide.SELL:
             mt5_order_type = mt5.ORDER_TYPE_SELL
             price = Decimal(str(tick.bid))
+        else:
+            raise ValueError(f"Unsupported order side: {order.side}")
+
+        if price <= Decimal(0):
+            raise RuntimeError(
+                f"Invalid market price for {order.symbol}: {price}"
+            )
 
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": order.symbol,
-            "volume": float(order.quantity),
+            "volume": float(quantity),
             "type": mt5_order_type,
             "price": float(price),
             "sl": (
@@ -225,31 +254,40 @@ class MT5ExecutionProvider(ExecutionProvider):
                 if order.take_profit is not None
                 else 0.0
             ),
-            "deviation": 20,
-            "magic": 260815,
-            "comment": "AtlasTrader",
+            "deviation": self.DEVIATION,
+            "magic": self.MAGIC_NUMBER,
+            "comment": self.COMMENT,
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": self._resolve_filling_mode(order.symbol),
         }
 
         result = mt5.order_send(request)
 
         if result is None:
             raise RuntimeError(
-                f"MT5 order submission failed: {mt5.last_error()}"
+                "MT5 order submission failed: "
+                f"{mt5.last_error()}"
             )
 
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
+        if not self._is_successful_trade_result(result.retcode):
             raise RuntimeError(
-                f"MT5 order rejected: "
+                "MT5 order rejected: "
                 f"retcode={result.retcode}, "
                 f"comment={result.comment}"
             )
 
+        executed_price = Decimal(str(result.price))
+
+        if executed_price <= Decimal(0):
+            raise RuntimeError(
+                f"MT5 returned invalid execution price: {executed_price}"
+            )
+
         return order.model_copy(
             update={
+                "quantity": quantity,
                 "status": OrderStatus.FILLED,
-                "price": Decimal(str(result.price)),
+                "price": executed_price,
                 "updated_at": datetime.now(UTC),
             }
         )
@@ -271,14 +309,119 @@ class MT5ExecutionProvider(ExecutionProvider):
 
         position = positions[0]
 
+        return self._to_position(position)
+
+    async def get_positions(self) -> list[Position]:
+        """Return all current MT5 positions."""
+
+        self._require_connection()
+
+        positions = mt5.positions_get()
+
+        if positions is None:
+            raise RuntimeError(
+                f"Unable to retrieve positions: {mt5.last_error()}"
+            )
+
+        return [
+            self._to_position(position)
+            for position in positions
+        ]
+
+    @staticmethod
+    def _validate_order_levels(order: Order) -> None:
+        """Validate stop-loss and take-profit direction."""
+
+        if order.price is not None and order.price <= Decimal(0):
+            raise ValueError("Order price must be greater than zero")
+
+        if (
+            order.stop_loss is not None
+            and order.side is OrderSide.BUY
+            and order.price is not None
+            and order.stop_loss >= order.price
+        ):
+            raise ValueError(
+                "BUY stop_loss must be below entry price"
+            )
+
+        if (
+            order.stop_loss is not None
+            and order.side is OrderSide.SELL
+            and order.price is not None
+            and order.stop_loss <= order.price
+        ):
+            raise ValueError(
+                "SELL stop_loss must be above entry price"
+            )
+
+        if (
+            order.take_profit is not None
+            and order.side is OrderSide.BUY
+            and order.price is not None
+            and order.take_profit <= order.price
+        ):
+            raise ValueError(
+                "BUY take_profit must be above entry price"
+            )
+
+        if (
+            order.take_profit is not None
+            and order.side is OrderSide.SELL
+            and order.price is not None
+            and order.take_profit >= order.price
+        ):
+            raise ValueError(
+                "SELL take_profit must be below entry price"
+            )
+
+    @staticmethod
+    def _resolve_filling_mode(symbol: str) -> int:
+        """Resolve a broker-supported MT5 filling mode."""
+
+        info = mt5.symbol_info(symbol)
+
+        if info is None:
+            raise KeyError(f"Instrument not found: {symbol}")
+
+        filling_mode = int(getattr(info, "filling_mode", 0))
+
+        if filling_mode & getattr(mt5, "SYMBOL_FILLING_FOK", 1):
+            return int(mt5.ORDER_FILLING_FOK)
+
+        if filling_mode & getattr(mt5, "SYMBOL_FILLING_IOC", 2):
+            return int(mt5.ORDER_FILLING_IOC)
+
+        return int(mt5.ORDER_FILLING_RETURN)
+
+    @staticmethod
+    def _is_successful_trade_result(retcode: int) -> bool:
+        """Return whether an MT5 trade result represents execution success."""
+
+        successful_codes = {
+            mt5.TRADE_RETCODE_DONE,
+            getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", -1),
+        }
+
+        return retcode in successful_codes
+
+    @staticmethod
+    def _to_position(position: MT5PositionRecord) -> Position:
+        """Convert an MT5 position record into an AtlasTrader Position."""
+
         side = (
             OrderSide.BUY
             if position.type == mt5.POSITION_TYPE_BUY
             else OrderSide.SELL
         )
 
+        opened_at = datetime.fromtimestamp(
+            position.time,
+            tz=UTC,
+        )
+
         return Position(
-            symbol=position.symbol,
+            symbol=str(position.symbol),
             side=side,
             status=PositionStatus.OPEN,
             quantity=Decimal(str(position.volume)),
@@ -294,10 +437,7 @@ class MT5ExecutionProvider(ExecutionProvider):
                 if position.tp
                 else None
             ),
-            opened_at=datetime.fromtimestamp(
-                position.time,
-                tz=UTC,
-            ),
+            opened_at=opened_at,
             closed_at=None,
             realized_pnl=Decimal(0),
             unrealized_pnl=Decimal(str(position.profit)),
@@ -375,56 +515,3 @@ class MT5ExecutionProvider(ExecutionProvider):
             return 0
 
         return max(0, -exponent)
-
-    async def get_positions(self) -> list[Position]:
-        """Return all current MT5 positions."""
-
-        self._require_connection()
-
-        positions = mt5.positions_get()
-
-        if positions is None:
-            raise RuntimeError(
-                f"Unable to retrieve positions: {mt5.last_error()}"
-            )
-
-        result: list[Position] = []
-
-        for position in positions:
-            side = (
-                OrderSide.BUY
-                if position.type == mt5.POSITION_TYPE_BUY
-                else OrderSide.SELL
-            )
-
-            result.append(
-                Position(
-                    symbol=position.symbol,
-                    side=side,
-                    status=PositionStatus.OPEN,
-                    quantity=Decimal(str(position.volume)),
-                    entry_price=Decimal(str(position.price_open)),
-                    current_price=Decimal(
-                        str(position.price_current)
-                    ),
-                    stop_loss=(
-                        Decimal(str(position.sl))
-                        if position.sl
-                        else None
-                    ),
-                    take_profit=(
-                        Decimal(str(position.tp))
-                        if position.tp
-                        else None
-                    ),
-                    opened_at=datetime.fromtimestamp(
-                        position.time,
-                        tz=UTC,
-                    ),
-                    closed_at=None,
-                    realized_pnl=Decimal(0),
-                    unrealized_pnl=Decimal(str(position.profit)),
-                )
-            )
-
-        return result
