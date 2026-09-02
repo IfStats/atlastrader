@@ -3,8 +3,10 @@ from decimal import Decimal
 
 import pytest
 
+from packages.core.enums import AssetClass
 from packages.core.models import Instrument
 from packages.portfolio.instrument_registry import InstrumentRegistry
+
 
 NOW = datetime.now(UTC)
 
@@ -15,7 +17,7 @@ def make_instrument(
     return Instrument(
         symbol=symbol,
         name="Gold",
-        asset_class="commodity",
+        asset_class=AssetClass.COMMODITY,
         tick_size=Decimal("0.01"),
         contract_size=Decimal(100),
         min_volume=Decimal("0.01"),
@@ -51,9 +53,7 @@ def test_registry_accepts_initial_instruments() -> None:
     gold = make_instrument("XAUUSD")
     silver = make_instrument("XAGUSD")
 
-    registry = InstrumentRegistry(
-        [gold, silver]
-    )
+    registry = InstrumentRegistry([gold, silver])
 
     assert registry.symbols() == [
         "XAUUSD",
@@ -143,6 +143,7 @@ def test_registry_returns_registered_symbols() -> None:
         "BTCUSD",
     ]
 
+
 def test_registry_filters_by_asset_class() -> None:
     registry = InstrumentRegistry(
         [
@@ -152,9 +153,9 @@ def test_registry_filters_by_asset_class() -> None:
         ]
     )
 
-    registry.get("XAUUSD").asset_class = "commodity"
-    registry.get("XAGUSD").asset_class = "commodity"
-    registry.get("EURUSD").asset_class = "forex"
+    registry.get("XAUUSD").asset_class = AssetClass.COMMODITY
+    registry.get("XAGUSD").asset_class = AssetClass.COMMODITY
+    registry.get("EURUSD").asset_class = AssetClass.FOREX
 
     commodities = registry.get_by_asset_class("commodity")
 

@@ -157,3 +157,4 @@ def test_strategy_service_works_with_momentum_strategy() -> None:
     assert signal is not None
     assert signal.symbol == "XAUUSD"
 
+

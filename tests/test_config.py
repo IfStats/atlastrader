@@ -10,7 +10,9 @@ from packages.core.config import (
 
 
 def test_risk_settings_defaults() -> None:
-    settings = RiskSettings()
+    settings = RiskSettings(
+        _env_file=None,  # type: ignore[call-arg]
+    )
 
     assert settings.max_risk_per_trade == Decimal("0.01")
     assert settings.max_daily_loss == Decimal("0.03")
@@ -25,6 +27,7 @@ def test_risk_settings_rejects_invalid_risk_per_trade() -> None:
     with pytest.raises(ValueError):
         RiskSettings(
             max_risk_per_trade=Decimal(0),
+            _env_file=None,  # type: ignore[call-arg]
         )
 
 
@@ -32,11 +35,14 @@ def test_risk_settings_rejects_risk_above_limit() -> None:
     with pytest.raises(ValueError):
         RiskSettings(
             max_risk_per_trade=Decimal("0.06"),
+            _env_file=None,  # type: ignore[call-arg]
         )
 
 
 def test_mt5_settings_defaults() -> None:
-    settings = MT5Settings()
+    settings = MT5Settings(
+        _env_file=None,  # type: ignore[call-arg]
+    )
 
     assert settings.login is None
     assert settings.password is None
@@ -50,6 +56,7 @@ def test_mt5_settings_detects_complete_credentials() -> None:
         login=123456,
         password="secret",
         server="Test-Server",
+        _env_file=None,  # type: ignore[call-arg]
     )
 
     assert settings.has_credentials() is True
@@ -60,13 +67,16 @@ def test_mt5_settings_rejects_incomplete_credentials() -> None:
         login=123456,
         password="",
         server="Test-Server",
+        _env_file=None,  # type: ignore[call-arg]
     )
 
     assert settings.has_credentials() is False
 
 
 def test_runtime_settings_defaults() -> None:
-    settings = RuntimeSettings()
+    settings = RuntimeSettings(
+        _env_file=None,  # type: ignore[call-arg]
+    )
 
     assert settings.symbols == "XAUUSD"
     assert settings.initial_balance == Decimal(0)
@@ -78,6 +88,7 @@ def test_runtime_settings_defaults() -> None:
 def test_runtime_settings_parses_symbols() -> None:
     settings = RuntimeSettings(
         symbols="xauusd, EURUSD, BTCUSD",
+        _env_file=None,  # type: ignore[call-arg]
     )
 
     assert settings.get_symbols() == [
@@ -90,6 +101,7 @@ def test_runtime_settings_parses_symbols() -> None:
 def test_runtime_settings_deduplicates_symbols() -> None:
     settings = RuntimeSettings(
         symbols="XAUUSD,EURUSD,XAUUSD",
+        _env_file=None,  # type: ignore[call-arg]
     )
 
     assert settings.get_symbols() == [
@@ -101,6 +113,7 @@ def test_runtime_settings_deduplicates_symbols() -> None:
 def test_runtime_settings_rejects_empty_symbols() -> None:
     settings = RuntimeSettings(
         symbols=" , , ",
+        _env_file=None,  # type: ignore[call-arg]
     )
 
     with pytest.raises(
@@ -114,6 +127,7 @@ def test_runtime_settings_rejects_negative_balance() -> None:
     with pytest.raises(ValueError):
         RuntimeSettings(
             initial_balance=Decimal(-1),
+            _env_file=None,  # type: ignore[call-arg]
         )
 
 
@@ -121,6 +135,7 @@ def test_runtime_settings_rejects_invalid_interval() -> None:
     with pytest.raises(ValueError):
         RuntimeSettings(
             scan_interval_seconds=0,
+            _env_file=None,  # type: ignore[call-arg]
         )
 
 
@@ -128,4 +143,5 @@ def test_runtime_settings_rejects_invalid_candle_lookback() -> None:
     with pytest.raises(ValueError):
         RuntimeSettings(
             candle_lookback=1,
+            _env_file=None,  # type: ignore[call-arg]
         )

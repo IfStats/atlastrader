@@ -490,3 +490,4 @@ def test_snapshot_reflects_realized_pnl_after_close() -> None:
     assert snapshot.open_positions == 0
     assert snapshot.total_exposure == Decimal(0)
 
+

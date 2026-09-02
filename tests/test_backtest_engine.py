@@ -4,16 +4,17 @@ from decimal import Decimal
 from packages.backtest.engine import BacktestEngine
 from packages.backtest.models import BacktestConfig
 from packages.core.enums import SignalDirection, StrategyType, Timeframe
-from packages.core.models import Candle, Signal
+from packages.core.models import Candle, MarketState, Signal
+from packages.strategy.interfaces import Strategy
 
 
-class FixedSignalStrategy:
+class FixedSignalStrategy(Strategy):
     """Test strategy that returns a predetermined signal."""
 
     def __init__(self, signal: Signal) -> None:
         self.signal = signal
 
-    def generate_signal(self, market_state):  # type: ignore[no-untyped-def]
+    def generate_signal(self, market_state: MarketState) -> Signal:
         return self.signal
 
 
@@ -58,17 +59,21 @@ def make_signal(
         entry_price=Decimal(100),
         stop_loss=stop_loss,
         take_profit=take_profit,
-        risk_reward_ratio=Decimal(2),
+        risk_reward_ratio=2.0,
     )
 
 
-def make_config(**overrides) -> BacktestConfig:  # type: ignore[no-untyped-def]
-    values = {
-        "symbol": "XAUUSD",
-        "initial_balance": Decimal(10000),
-    }
-    values.update(overrides)
-    return BacktestConfig(**values)
+def make_config(
+    *,
+    commission_per_trade: Decimal = Decimal(0),
+    slippage: Decimal = Decimal(0),
+) -> BacktestConfig:
+    return BacktestConfig(
+        symbol="XAUUSD",
+        initial_balance=Decimal(10000),
+        commission_per_trade=commission_per_trade,
+        slippage=slippage,
+    )
 
 
 def test_backtest_returns_empty_result_for_empty_candles() -> None:

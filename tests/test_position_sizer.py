@@ -3,8 +3,10 @@ from decimal import Decimal
 
 import pytest
 
+from packages.core.enums import AssetClass
 from packages.core.models import Instrument
 from packages.risk.position_sizer import DefaultPositionSizer
+
 
 NOW = datetime.now(UTC)
 
@@ -13,7 +15,7 @@ def make_instrument() -> Instrument:
     return Instrument(
         symbol="XAUUSD",
         name="Gold",
-        asset_class="commodity",
+        asset_class=AssetClass.COMMODITY,
         tick_size=Decimal("0.01"),
         contract_size=Decimal(100),
         min_volume=Decimal("0.01"),

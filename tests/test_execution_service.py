@@ -53,12 +53,12 @@ def make_market_state() -> MarketState:
         timeframe=Timeframe.M5,
         timestamp=datetime.now(UTC),
         price=Decimal(3350),
-        trend_score=Decimal("0.90"),
-        momentum_score=Decimal("0.90"),
-        volatility_score=Decimal("0.50"),
+        trend_score=0.90,
+        momentum_score=0.90,
+        volatility_score=0.50,
         volatility=Decimal(5),
         spread=Decimal("0.20"),
-        status=MarketStatus.OPEN,
+        market_status=MarketStatus.OPEN,
         is_tradeable=True,
     )
 

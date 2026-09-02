@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from packages.core.config import RiskSettings
-from packages.core.enums import OrderStatus, Timeframe
+from packages.core.enums import AssetClass, OrderStatus, Timeframe
 from packages.core.models import Instrument, MarketState, Signal
 from packages.engine.service import DefaultTradingEngine
 from packages.execution.mock import MockExecutionProvider
@@ -23,7 +23,7 @@ def make_instrument() -> Instrument:
     return Instrument(
         symbol="XAUUSD",
         name="Gold",
-        asset_class="commodity",
+        asset_class=AssetClass.COMMODITY,
         tick_size=Decimal("0.01"),
         contract_size=Decimal(100),
         min_volume=Decimal("0.01"),
@@ -108,8 +108,8 @@ class RejectingRiskManager(DefaultRiskManager):
         self,
         signal: Signal,
         market_state: MarketState,
-        portfolio=None,
-        **kwargs,
+        portfolio: PortfolioService | None = None,
+        **kwargs: object,
     ) -> bool:
         return False
 
@@ -302,3 +302,4 @@ async def test_engine_process_symbol_propagates_market_data_error() -> None:
         await engine.process_symbol("XAUUSD")
 
     provider.get_market_state.assert_awaited_once_with("XAUUSD")
+

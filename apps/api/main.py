@@ -229,6 +229,7 @@ async def runtime_status(
         execution_connected,
     )
 
+
 @app.get(
     "/runtime/metrics",
     response_model=RuntimeMetricsResponse,
@@ -251,6 +252,7 @@ async def runtime_metrics(
         successful_scan_count=metrics.successful_scan_count,
         failed_scan_count=metrics.failed_scan_count,
     )
+
 
 @app.post(
     "/runtime/start",
@@ -379,9 +381,9 @@ async def position(
 
     if tracked_position is None:
         raise APIError(
-    code="POSITION_NOT_FOUND",
-    message=f"No tracked position exists for {normalized_symbol}.",
-    status_code=status.HTTP_404_NOT_FOUND,
-)
+            code="POSITION_NOT_FOUND",
+            message=f"No tracked position exists for {normalized_symbol}.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
 
     return _position_response(tracked_position)

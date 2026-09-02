@@ -296,3 +296,4 @@ async def test_unsubscribe_quotes_requires_connection() -> None:
 
     with pytest.raises(RuntimeError, match="not connected"):
         await provider.unsubscribe_quotes(["XAUUSD"])
+

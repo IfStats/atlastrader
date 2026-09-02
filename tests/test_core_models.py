@@ -278,7 +278,6 @@ def test_instrument_allows_missing_max_volume() -> None:
         symbol="EURUSD",
         name="Euro / US Dollar",
         asset_class=AssetClass.FOREX,
-        base_currency="EUR",
         quote_currency="USD",
         broker_symbol="EURUSD",
         tick_size=Decimal("0.00001"),

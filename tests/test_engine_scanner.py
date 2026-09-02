@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from packages.core.enums import AssetClass
 from packages.core.models import Instrument, Order
 from packages.engine.scanner import DefaultMarketScanner
 from packages.portfolio.instrument_registry import InstrumentRegistry
@@ -16,7 +17,11 @@ def make_instrument(symbol: str) -> Instrument:
     return Instrument(
         symbol=symbol,
         name=symbol,
-        asset_class="forex" if symbol == "EURUSD" else "commodity",
+        asset_class=(
+            AssetClass.FOREX
+            if symbol == "EURUSD"
+            else AssetClass.COMMODITY
+        ),
         tick_size=Decimal("0.01"),
         contract_size=Decimal(100),
         min_volume=Decimal("0.01"),
@@ -81,7 +86,10 @@ async def test_scanner_calls_error_handler() -> None:
 
     on_error.assert_awaited_once()
 
-    args = on_error.await_args.args
+    await_args = on_error.await_args
+    assert await_args is not None
+
+    args = await_args.args
 
     assert args[0] == "XAUUSD"
     assert isinstance(args[1], RuntimeError)
@@ -186,4 +194,5 @@ async def test_scanner_preserves_order_results() -> None:
 
     assert results["XAUUSD"] is first_order
     assert results["EURUSD"] is second_order
+
 

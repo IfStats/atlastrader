@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -84,23 +84,42 @@ class RuntimeSettings(BaseSettings):
     )
 
     symbols: str = "XAUUSD"
-
     initial_balance: Decimal = Field(
         default=Decimal(0),
         ge=0,
     )
-
     scan_interval_seconds: float = Field(
         default=5.0,
         gt=0,
     )
-
     timeframe: str = "M5"
-
     candle_lookback: int = Field(
         default=20,
         ge=2,
     )
+
+    @field_validator("timeframe")
+    @classmethod
+    def normalize_timeframe(cls, value: str) -> str:
+        """Normalize configured timeframe names."""
+
+        normalized = value.strip().upper()
+
+        aliases = {
+            "1M": "M1",
+            "1MIN": "M1",
+            "5M": "M5",
+            "5MIN": "M5",
+            "15M": "M15",
+            "15MIN": "M15",
+            "30M": "M30",
+            "30MIN": "M30",
+            "1H": "H1",
+            "4H": "H4",
+            "1D": "D1",
+        }
+
+        return aliases.get(normalized, normalized)
 
     def get_symbols(self) -> list[str]:
         """Return normalized, deduplicated trading symbols."""

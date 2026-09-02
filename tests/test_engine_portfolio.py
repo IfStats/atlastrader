@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from packages.core.config import RiskSettings
-from packages.core.enums import OrderSide, OrderStatus, Timeframe
+from packages.core.enums import AssetClass, OrderSide, OrderStatus, Timeframe
 from packages.core.models import Instrument, MarketState
 from packages.engine.service import DefaultTradingEngine
 from packages.execution.mock import MockExecutionProvider
@@ -21,7 +21,7 @@ def make_instrument() -> Instrument:
     return Instrument(
         symbol="XAUUSD",
         name="Gold",
-        asset_class="commodity",
+        asset_class=AssetClass.COMMODITY,
         tick_size=Decimal("0.01"),
         contract_size=Decimal(100),
         min_volume=Decimal("0.01"),

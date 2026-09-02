@@ -1,9 +1,8 @@
 from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from packages.core.config import RiskSettings
 from packages.core.enums import (
     MarketStatus,
@@ -98,13 +97,14 @@ async def test_engine_does_not_execute_when_market_is_not_tradeable() -> None:
     execution = AsyncMock(spec=ExecutionProvider)
     engine = make_engine(execution)
 
-    engine.strategy_service.select_signal = MagicMock(
+    with patch.object(
+        engine.strategy_service,
+        "select_signal",
         return_value=make_signal(),
-    )
-
-    result = await engine.process_market_state(
-        make_market_state(tradeable=False),
-    )
+    ):
+        result = await engine.process_market_state(
+            make_market_state(tradeable=False),
+        )
 
     assert result is None
     execution.submit_order.assert_not_awaited()
@@ -115,13 +115,14 @@ async def test_engine_does_not_execute_signal_without_stop_loss() -> None:
     execution = AsyncMock(spec=ExecutionProvider)
     engine = make_engine(execution)
 
-    engine.strategy_service.select_signal = MagicMock(
+    with patch.object(
+        engine.strategy_service,
+        "select_signal",
         return_value=make_signal(stop_loss=None),
-    )
-
-    result = await engine.process_market_state(
-        make_market_state(),
-    )
+    ):
+        result = await engine.process_market_state(
+            make_market_state(),
+        )
 
     assert result is None
     execution.submit_order.assert_not_awaited()
@@ -132,13 +133,14 @@ async def test_engine_does_not_execute_signal_without_take_profit() -> None:
     execution = AsyncMock(spec=ExecutionProvider)
     engine = make_engine(execution)
 
-    engine.strategy_service.select_signal = MagicMock(
+    with patch.object(
+        engine.strategy_service,
+        "select_signal",
         return_value=make_signal(take_profit=None),
-    )
-
-    result = await engine.process_market_state(
-        make_market_state(),
-    )
+    ):
+        result = await engine.process_market_state(
+            make_market_state(),
+        )
 
     assert result is None
     execution.submit_order.assert_not_awaited()
@@ -149,13 +151,14 @@ async def test_engine_does_not_execute_signal_below_minimum_risk_reward() -> Non
     execution = AsyncMock(spec=ExecutionProvider)
     engine = make_engine(execution)
 
-    engine.strategy_service.select_signal = MagicMock(
+    with patch.object(
+        engine.strategy_service,
+        "select_signal",
         return_value=make_signal(risk_reward_ratio=1.0),
-    )
-
-    result = await engine.process_market_state(
-        make_market_state(),
-    )
+    ):
+        result = await engine.process_market_state(
+            make_market_state(),
+        )
 
     assert result is None
     execution.submit_order.assert_not_awaited()

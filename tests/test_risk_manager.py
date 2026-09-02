@@ -34,9 +34,9 @@ def make_market_state() -> MarketState:
         timeframe=Timeframe.M5,
         timestamp=datetime.now(UTC),
         price=Decimal(3350),
-        trend_score=Decimal("0.8"),
-        momentum_score=Decimal("0.7"),
-        volatility_score=Decimal("0.5"),
+        trend_score=0.8,
+        momentum_score=0.7,
+        volatility_score=0.5,
         volatility=Decimal(5),
         spread=Decimal("0.20"),
         is_tradeable=True,
@@ -54,7 +54,7 @@ def make_signal() -> Signal:
         entry_price=Decimal(3350),
         stop_loss=Decimal(3345),
         take_profit=Decimal(3360),
-        risk_reward_ratio=Decimal(2),
+        risk_reward_ratio=2.0,
     )
 
 
