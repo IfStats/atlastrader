@@ -1,3 +1,5 @@
+import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, ClassVar
@@ -27,7 +29,6 @@ class MT5MarketDataProvider(MarketDataProvider):
 
     async def connect(self) -> None:
         """Initialize the MetaTrader 5 terminal connection."""
-
         if self._connected:
             return
 
@@ -41,7 +42,6 @@ class MT5MarketDataProvider(MarketDataProvider):
 
     async def disconnect(self) -> None:
         """Shutdown the MetaTrader 5 terminal connection."""
-
         if not self._connected:
             return
 
@@ -50,7 +50,6 @@ class MT5MarketDataProvider(MarketDataProvider):
 
     async def get_quote(self, symbol: str) -> Quote:
         """Return the latest normalized quote."""
-
         self._require_connection()
 
         tick = mt5.symbol_info_tick(symbol)
@@ -86,7 +85,6 @@ class MT5MarketDataProvider(MarketDataProvider):
         end: datetime,
     ) -> list[Candle]:
         """Return historical candles ordered from oldest to newest."""
-
         self._require_connection()
 
         if start >= end:
@@ -134,8 +132,10 @@ class MT5MarketDataProvider(MarketDataProvider):
         symbols: list[str],
     ) -> None:
         """Ensure requested symbols are available in MetaTrader 5."""
-
         self._require_connection()
+
+        if not symbols:
+            raise ValueError("At least one symbol is required")
 
         for symbol in symbols:
             if not mt5.symbol_select(symbol, True):
@@ -149,8 +149,10 @@ class MT5MarketDataProvider(MarketDataProvider):
         symbols: list[str],
     ) -> None:
         """Remove requested symbols from the MetaTrader 5 watchlist."""
-
         self._require_connection()
+
+        if not symbols:
+            return
 
         for symbol in symbols:
             if not mt5.symbol_select(symbol, False):
@@ -159,9 +161,46 @@ class MT5MarketDataProvider(MarketDataProvider):
                     f"Failed to unsubscribe from {symbol}: {error}"
                 )
 
+    def stream_quotes(
+        self,
+        symbols: list[str],
+        *,
+        interval_seconds: float = 0.25,
+    ) -> AsyncIterator[Quote]:
+        """Poll MT5 for live quotes and yield normalized updates."""
+        return self._stream_quotes(
+            symbols,
+            interval_seconds=interval_seconds,
+        )
+
+    async def _stream_quotes(
+        self,
+        symbols: list[str],
+        *,
+        interval_seconds: float,
+    ) -> AsyncIterator[Quote]:
+        """Internal asynchronous MT5 quote polling loop."""
+        self._require_connection()
+
+        normalized_symbols = list(dict.fromkeys(symbols))
+
+        if not normalized_symbols:
+            raise ValueError("At least one symbol is required")
+
+        if interval_seconds <= 0:
+            raise ValueError(
+                "interval_seconds must be greater than zero"
+            )
+
+        while True:
+            for symbol in normalized_symbols:
+                quote = await self.get_quote(symbol)
+                yield quote
+
+            await asyncio.sleep(interval_seconds)
+
     def _require_connection(self) -> None:
         """Raise when the provider is not connected."""
-
         if not self._connected:
             raise RuntimeError(
                 "Market-data provider is not connected"
@@ -173,5 +212,4 @@ class MT5MarketDataProvider(MarketDataProvider):
         field: str,
     ) -> Decimal:
         """Normalize a numeric MT5 rate field to Decimal."""
-
         return Decimal(str(rate[field]))

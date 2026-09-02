@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from datetime import datetime
 
 from packages.core.enums import Timeframe
@@ -43,6 +44,18 @@ class MarketDataProvider(ABC):
     async def unsubscribe_quotes(self, symbols: list[str]) -> None:
         """Unsubscribe from live quote updates."""
         raise NotImplementedError
+
+    def stream_quotes(
+        self,
+        symbols: list[str],
+        *,
+        interval_seconds: float = 0.25,
+    ) -> AsyncIterator[Quote]:
+        """Return an asynchronous stream of live quote updates."""
+        raise NotImplementedError(
+            "This market-data provider does not implement "
+            "stream_quotes"
+        )
 
     async def get_market_state(
         self,

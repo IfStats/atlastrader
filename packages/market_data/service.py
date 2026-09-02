@@ -1,8 +1,9 @@
+from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 from packages.core.enums import MarketStatus, Timeframe
-from packages.core.models import Candle, MarketState
+from packages.core.models import Candle, MarketState, Quote
 from packages.market_data.base import MarketDataProvider
 from packages.market_data.cache import MarketDataCache
 from packages.market_data.indicators import MarketIndicators
@@ -29,7 +30,6 @@ class MarketDataService:
 
     async def get_market_state(self, symbol: str) -> MarketState:
         """Fetch market data and build an indicator-enriched MarketState."""
-
         quote = self.cache.get_quote(symbol)
 
         if quote is None:
@@ -94,9 +94,32 @@ class MarketDataService:
             ),
         )
 
+    async def stream_quotes(
+        self,
+        symbols: list[str],
+        *,
+        interval_seconds: float = 0.25,
+    ) -> AsyncIterator[Quote]:
+        """Stream live quotes while updating the normalized quote cache."""
+        normalized_symbols = list(dict.fromkeys(symbols))
+
+        if not normalized_symbols:
+            raise ValueError("At least one symbol is required")
+
+        if interval_seconds <= 0:
+            raise ValueError(
+                "interval_seconds must be greater than zero"
+            )
+
+        async for quote in self.provider.stream_quotes(
+            normalized_symbols,
+            interval_seconds=interval_seconds,
+        ):
+            self.cache.set_quote(quote)
+            yield quote
+
     def _calculate_start_time(self, end: datetime) -> datetime:
         """Calculate the beginning of the candle lookback window."""
-
         timeframe_minutes = {
             Timeframe.M1: 1,
             Timeframe.M5: 5,
@@ -120,7 +143,6 @@ class MarketDataService:
         timeframe: Timeframe,
     ) -> None:
         """Validate the provider's historical candle series."""
-
         if len(candles) < self.candle_lookback:
             raise ValueError(
                 "Insufficient candles: "
@@ -173,7 +195,6 @@ class MarketDataService:
         candles: list[Candle] | None = None,
     ) -> Decimal:
         """Calculate absolute average candle range."""
-
         if not candles:
             return Decimal(0)
 
@@ -190,7 +211,6 @@ class MarketDataService:
         volatility: Decimal,
     ) -> bool:
         """Determine whether the current market has usable price data."""
-
         if spread < Decimal(0):
             return False
 
