@@ -4,10 +4,14 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from apps.api.dependencies import get_runtime
+from apps.api.errors import APIError, RuntimeControlError
 from apps.api.schemas import (
+    ErrorDetail,
     ErrorResponse,
     HealthResponse,
     PortfolioResponse,
@@ -67,6 +71,80 @@ app = FastAPI(
     description="Operational API boundary for AtlasTrader.",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(APIError)
+async def api_error_handler(
+    _request: Request,
+    exc: APIError,
+) -> JSONResponse:
+    """Return expected application errors using the public API contract."""
+
+    response = ErrorResponse(
+        error=ErrorDetail(
+            code=exc.code,
+            message=exc.message,
+        ),
+    )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=response.model_dump(mode="json"),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    _request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Return request validation failures using the public API contract."""
+
+    details = exc.errors()
+
+    message = "Request validation failed."
+
+    if details:
+        first_error = details[0]
+        location = ".".join(str(item) for item in first_error["loc"])
+        error_message = str(first_error["msg"])
+
+        if location:
+            message = f"{location}: {error_message}"
+        else:
+            message = error_message
+
+    response = ErrorResponse(
+        error=ErrorDetail(
+            code="VALIDATION_ERROR",
+            message=message,
+        ),
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=response.model_dump(mode="json"),
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(
+    _request: Request,
+    _exc: Exception,
+) -> JSONResponse:
+    """Return a safe response for unexpected application failures."""
+
+    response = ErrorResponse(
+        error=ErrorDetail(
+            code="INTERNAL_SERVER_ERROR",
+            message="An unexpected internal error occurred.",
+        ),
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content=response.model_dump(mode="json"),
+    )
 
 
 def _position_response(position: Position) -> PositionResponse:
@@ -161,7 +239,13 @@ async def start_runtime(
 ) -> RuntimeStatusResponse:
     """Start the trading runtime."""
 
-    await runtime.start()
+    try:
+        await runtime.start()
+    except Exception as exc:
+        raise RuntimeControlError(
+            code="RUNTIME_START_FAILED",
+            message="Unable to start trading runtime.",
+        ) from exc
 
     execution_connected = await runtime.execution_provider.is_connected()
 
@@ -181,7 +265,13 @@ async def stop_runtime(
 ) -> RuntimeStatusResponse:
     """Stop the trading runtime."""
 
-    await runtime.stop()
+    try:
+        await runtime.stop()
+    except Exception as exc:
+        raise RuntimeControlError(
+            code="RUNTIME_STOP_FAILED",
+            message="Unable to stop trading runtime.",
+        ) from exc
 
     execution_connected = await runtime.execution_provider.is_connected()
 
@@ -199,9 +289,15 @@ async def stop_runtime(
 async def reconcile_runtime(
     runtime: RuntimeDependency,
 ) -> PortfolioResponse:
-    """Reconcile broker account state with the local portfolio."""
+    """Reconcile account state with the broker."""
 
-    await runtime.reconcile()
+    try:
+        await runtime.reconcile()
+    except Exception as exc:
+        raise RuntimeControlError(
+            code="RUNTIME_RECONCILE_FAILED",
+            message="Unable to reconcile trading portfolio.",
+        ) from exc
 
     return _portfolio_response(runtime)
 
@@ -259,14 +355,10 @@ async def position(
     tracked_position = runtime.portfolio.get_position(normalized_symbol)
 
     if tracked_position is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "POSITION_NOT_FOUND",
-                "message": (
-                    f"No tracked position exists for {normalized_symbol}."
-                ),
-            },
-        )
+        raise APIError(
+    code="POSITION_NOT_FOUND",
+    message=f"No tracked position exists for {normalized_symbol}.",
+    status_code=status.HTTP_404_NOT_FOUND,
+)
 
     return _position_response(tracked_position)

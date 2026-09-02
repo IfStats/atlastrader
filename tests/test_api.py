@@ -155,6 +155,28 @@ def test_start_runtime_is_idempotent() -> None:
     runtime.start.assert_awaited_once()
 
 
+def test_start_runtime_failure_returns_standard_error() -> None:
+    runtime = make_runtime()
+    runtime.start = AsyncMock(
+        side_effect=RuntimeError("broker unavailable"),
+    )
+    app.state.runtime = runtime
+
+    client = TestClient(app)
+
+    response = client.post("/runtime/start")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "RUNTIME_START_FAILED",
+            "message": "Unable to start trading runtime.",
+        },
+    }
+
+    runtime.start.assert_awaited_once()
+
+
 def test_stop_runtime() -> None:
     runtime = make_runtime()
     runtime.stop = AsyncMock()
@@ -197,6 +219,28 @@ def test_stop_runtime_is_idempotent() -> None:
 
     assert response.status_code == 200
     assert response.json()["running"] is False
+    runtime.stop.assert_awaited_once()
+
+
+def test_stop_runtime_failure_returns_standard_error() -> None:
+    runtime = make_runtime()
+    runtime.stop = AsyncMock(
+        side_effect=RuntimeError("broker disconnect failed"),
+    )
+    app.state.runtime = runtime
+
+    client = TestClient(app)
+
+    response = client.post("/runtime/stop")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "RUNTIME_STOP_FAILED",
+            "message": "Unable to stop trading runtime.",
+        },
+    }
+
     runtime.stop.assert_awaited_once()
 
 
@@ -244,6 +288,28 @@ def test_reconcile_runtime_reflects_portfolio() -> None:
     assert payload["open_positions"] == 1
     assert payload["open_symbols"] == ["XAUUSD"]
     assert payload["total_exposure"] == "670.00"
+
+    runtime.reconcile.assert_awaited_once()
+
+
+def test_reconcile_runtime_failure_returns_standard_error() -> None:
+    runtime = make_runtime()
+    runtime.reconcile = AsyncMock(
+        side_effect=RuntimeError("broker synchronization failed"),
+    )
+    app.state.runtime = runtime
+
+    client = TestClient(app)
+
+    response = client.post("/runtime/reconcile")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "RUNTIME_RECONCILE_FAILED",
+            "message": "Unable to reconcile trading portfolio.",
+        },
+    }
 
     runtime.reconcile.assert_awaited_once()
 
@@ -318,17 +384,39 @@ def test_get_position() -> None:
     assert payload["quantity"] == "0.20"
 
 
-def test_get_missing_position_returns_404() -> None:
+def test_get_missing_position_returns_standard_error() -> None:
     client = make_client()
 
     response = client.get("/positions/XAUUSD")
 
     assert response.status_code == 404
 
-    payload = response.json()
+    assert response.json() == {
+        "error": {
+            "code": "POSITION_NOT_FOUND",
+            "message": "No tracked position exists for XAUUSD.",
+        },
+    }
 
-    assert payload["detail"]["code"] == "POSITION_NOT_FOUND"
-    assert (
-        payload["detail"]["message"]
-        == "No tracked position exists for XAUUSD."
+
+def test_unexpected_error_returns_standard_error() -> None:
+    runtime = make_runtime()
+    runtime.execution_provider.is_connected = AsyncMock(
+        side_effect=RuntimeError("unexpected failure"),
     )
+    app.state.runtime = runtime
+
+    client = TestClient(
+    app,
+    raise_server_exceptions=False,
+)
+
+    response = client.get("/status")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "An unexpected internal error occurred.",
+        },
+    }
