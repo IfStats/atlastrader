@@ -7,7 +7,6 @@ from packages.core.enums import AssetClass
 from packages.core.models import Instrument
 from packages.portfolio.instrument_registry import InstrumentRegistry
 
-
 NOW = datetime.now(UTC)
 
 

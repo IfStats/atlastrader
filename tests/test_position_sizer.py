@@ -7,7 +7,6 @@ from packages.core.enums import AssetClass
 from packages.core.models import Instrument
 from packages.risk.position_sizer import DefaultPositionSizer
 
-
 NOW = datetime.now(UTC)
 
 

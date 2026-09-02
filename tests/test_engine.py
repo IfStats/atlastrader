@@ -10,6 +10,7 @@ from packages.core.models import Instrument, MarketState, Signal
 from packages.engine.service import DefaultTradingEngine
 from packages.execution.mock import MockExecutionProvider
 from packages.market_data.base import MarketDataProvider
+from packages.portfolio.models import PortfolioSnapshot
 from packages.portfolio.service import PortfolioService
 from packages.risk.manager import DefaultRiskManager
 from packages.risk.position_sizer import DefaultPositionSizer
@@ -102,14 +103,14 @@ def make_engine(
 
 
 class RejectingRiskManager(DefaultRiskManager):
-    """Risk manager that rejects every signal for engine tests."""
-
     def approve_signal(
         self,
         signal: Signal,
         market_state: MarketState,
-        portfolio: PortfolioService | None = None,
-        **kwargs: object,
+        portfolio: PortfolioSnapshot | None = None,
+        *,
+        open_positions: int | None = None,
+        current_exposure: Decimal | None = None,
     ) -> bool:
         return False
 

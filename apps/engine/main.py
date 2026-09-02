@@ -19,6 +19,20 @@ from packages.risk.manager import DefaultRiskManager
 from packages.runtime.factory import create_runtime
 from packages.runtime.service import TradingRuntime
 
+__all__ = [
+    "MT5Settings",
+    "RiskSettings",
+    "RuntimeSettings",
+    "build_demo_order",
+    "create_mt5_providers",
+    "main",
+    "parse_args",
+    "parse_side",
+    "run_demo_order",
+    "run_preflight",
+    "run_runtime",
+]
+
 DEMO_SYMBOL = "XAUUSD"
 DEMO_VOLUME = Decimal("0.01")
 DEMO_STOP_DISTANCE = Decimal("5.00")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -110,18 +110,28 @@ def test_status() -> None:
     assert payload["interval_seconds"] == 60
 
 
+
 def test_start_runtime() -> None:
     runtime = make_runtime()
-    runtime.start = AsyncMock()
-    runtime.execution_provider.is_connected = AsyncMock(
-        return_value=True,
-    )
     runtime._started = True
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/start")
+    with (
+        patch.object(
+            runtime,
+            "start",
+            new_callable=AsyncMock,
+        ) as start,
+        patch.object(
+            runtime.execution_provider,
+            "is_connected",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+    ):
+        response = client.post("/runtime/start")
 
     assert response.status_code == 200
 
@@ -134,37 +144,51 @@ def test_start_runtime() -> None:
     assert payload["symbols"] == ["XAUUSD", "EURUSD"]
     assert payload["interval_seconds"] == 60
 
-    runtime.start.assert_awaited_once()
+    start.assert_awaited_once()
+
 
 
 def test_start_runtime_is_idempotent() -> None:
     runtime = make_runtime()
-    runtime.start = AsyncMock()
-    runtime.execution_provider.is_connected = AsyncMock(
-        return_value=True,
-    )
     runtime._started = True
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/start")
+    with (
+        patch.object(
+            runtime,
+            "start",
+            new_callable=AsyncMock,
+        ) as start,
+        patch.object(
+            runtime.execution_provider,
+            "is_connected",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+    ):
+        response = client.post("/runtime/start")
 
     assert response.status_code == 200
     assert response.json()["running"] is True
-    runtime.start.assert_awaited_once()
+    start.assert_awaited_once()
+
 
 
 def test_start_runtime_failure_returns_standard_error() -> None:
     runtime = make_runtime()
-    runtime.start = AsyncMock(
-        side_effect=RuntimeError("broker unavailable"),
-    )
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/start")
+    with patch.object(
+        runtime,
+        "start",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("broker unavailable"),
+    ) as start:
+        response = client.post("/runtime/start")
 
     assert response.status_code == 500
     assert response.json() == {
@@ -174,21 +198,31 @@ def test_start_runtime_failure_returns_standard_error() -> None:
         },
     }
 
-    runtime.start.assert_awaited_once()
+    start.assert_awaited_once()
+
 
 
 def test_stop_runtime() -> None:
     runtime = make_runtime()
-    runtime.stop = AsyncMock()
-    runtime.execution_provider.is_connected = AsyncMock(
-        return_value=False,
-    )
     runtime._started = False
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/stop")
+    with (
+        patch.object(
+            runtime,
+            "stop",
+            new_callable=AsyncMock,
+        ) as stop,
+        patch.object(
+            runtime.execution_provider,
+            "is_connected",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+    ):
+        response = client.post("/runtime/stop")
 
     assert response.status_code == 200
 
@@ -201,37 +235,51 @@ def test_stop_runtime() -> None:
     assert payload["symbols"] == ["XAUUSD", "EURUSD"]
     assert payload["interval_seconds"] == 60
 
-    runtime.stop.assert_awaited_once()
+    stop.assert_awaited_once()
+
 
 
 def test_stop_runtime_is_idempotent() -> None:
     runtime = make_runtime()
-    runtime.stop = AsyncMock()
-    runtime.execution_provider.is_connected = AsyncMock(
-        return_value=False,
-    )
     runtime._started = False
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/stop")
+    with (
+        patch.object(
+            runtime,
+            "stop",
+            new_callable=AsyncMock,
+        ) as stop,
+        patch.object(
+            runtime.execution_provider,
+            "is_connected",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+    ):
+        response = client.post("/runtime/stop")
 
     assert response.status_code == 200
     assert response.json()["running"] is False
-    runtime.stop.assert_awaited_once()
+    stop.assert_awaited_once()
+
 
 
 def test_stop_runtime_failure_returns_standard_error() -> None:
     runtime = make_runtime()
-    runtime.stop = AsyncMock(
-        side_effect=RuntimeError("broker disconnect failed"),
-    )
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/stop")
+    with patch.object(
+        runtime,
+        "stop",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("broker disconnect failed"),
+    ) as stop:
+        response = client.post("/runtime/stop")
 
     assert response.status_code == 500
     assert response.json() == {
@@ -241,17 +289,22 @@ def test_stop_runtime_failure_returns_standard_error() -> None:
         },
     }
 
-    runtime.stop.assert_awaited_once()
+    stop.assert_awaited_once()
+
 
 
 def test_reconcile_runtime() -> None:
     runtime = make_runtime()
-    runtime.reconcile = AsyncMock()
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/reconcile")
+    with patch.object(
+        runtime,
+        "reconcile",
+        new_callable=AsyncMock,
+    ) as reconcile:
+        response = client.post("/runtime/reconcile")
 
     assert response.status_code == 200
 
@@ -267,18 +320,23 @@ def test_reconcile_runtime() -> None:
     assert payload["available_equity"] == "10000"
     assert payload["open_symbols"] == []
 
-    runtime.reconcile.assert_awaited_once()
+    reconcile.assert_awaited_once()
+
 
 
 def test_reconcile_runtime_reflects_portfolio() -> None:
     runtime = make_runtime()
     runtime.portfolio.add_position(make_position())
-    runtime.reconcile = AsyncMock()
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/reconcile")
+    with patch.object(
+        runtime,
+        "reconcile",
+        new_callable=AsyncMock,
+    ) as reconcile:
+        response = client.post("/runtime/reconcile")
 
     assert response.status_code == 200
 
@@ -289,19 +347,23 @@ def test_reconcile_runtime_reflects_portfolio() -> None:
     assert payload["open_symbols"] == ["XAUUSD"]
     assert payload["total_exposure"] == "670.00"
 
-    runtime.reconcile.assert_awaited_once()
+    reconcile.assert_awaited_once()
+
 
 
 def test_reconcile_runtime_failure_returns_standard_error() -> None:
     runtime = make_runtime()
-    runtime.reconcile = AsyncMock(
-        side_effect=RuntimeError("broker synchronization failed"),
-    )
     app.state.runtime = runtime
 
     client = TestClient(app)
 
-    response = client.post("/runtime/reconcile")
+    with patch.object(
+        runtime,
+        "reconcile",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("broker synchronization failed"),
+    ) as reconcile:
+        response = client.post("/runtime/reconcile")
 
     assert response.status_code == 500
     assert response.json() == {
@@ -311,7 +373,7 @@ def test_reconcile_runtime_failure_returns_standard_error() -> None:
         },
     }
 
-    runtime.reconcile.assert_awaited_once()
+    reconcile.assert_awaited_once()
 
 
 def test_portfolio() -> None:
@@ -399,19 +461,23 @@ def test_get_missing_position_returns_standard_error() -> None:
     }
 
 
+
 def test_unexpected_error_returns_standard_error() -> None:
     runtime = make_runtime()
-    runtime.execution_provider.is_connected = AsyncMock(
-        side_effect=RuntimeError("unexpected failure"),
-    )
     app.state.runtime = runtime
 
     client = TestClient(
-    app,
-    raise_server_exceptions=False,
-)
+        app,
+        raise_server_exceptions=False,
+    )
 
-    response = client.get("/status")
+    with patch.object(
+        runtime.execution_provider,
+        "is_connected",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("unexpected failure"),
+    ):
+        response = client.get("/status")
 
     assert response.status_code == 500
     assert response.json() == {
@@ -420,6 +486,7 @@ def test_unexpected_error_returns_standard_error() -> None:
             "message": "An unexpected internal error occurred.",
         },
     }
+
 
 def test_runtime_metrics() -> None:
     runtime = make_runtime()

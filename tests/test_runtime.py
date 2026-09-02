@@ -2,7 +2,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from typing import cast
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -141,7 +142,7 @@ async def test_runtime_starts() -> None:
         _runner,
     ) = make_runtime()
 
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     await runtime.start()
 
@@ -169,7 +170,7 @@ async def test_runtime_start_syncs_balance_and_positions() -> None:
     ) = make_runtime()
 
     provider._balance = Decimal(12500)
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     await runtime.start()
 
@@ -191,7 +192,7 @@ async def test_runtime_does_not_start_twice() -> None:
         runner,
     ) = make_runtime()
 
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     await runtime.start()
 
@@ -216,11 +217,12 @@ async def test_runtime_start_failure_disconnects_provider() -> None:
         _runner,
     ) = make_runtime()
 
-    position_manager.sync_all = AsyncMock(
+    with patch.object(
+        position_manager,
+        "sync_all",
+        new_callable=AsyncMock,
         side_effect=RuntimeError("Synchronization failed"),
-    )
-
-    with pytest.raises(
+    ), pytest.raises(
         RuntimeError,
         match="Synchronization failed",
     ):
@@ -266,11 +268,14 @@ async def test_runtime_reconcile_delegates_to_reconciliation_service() -> None:
         _runner,
     ) = make_runtime()
 
-    reconciliation.reconcile = AsyncMock()
+    with patch.object(
+        reconciliation,
+        "reconcile",
+        new_callable=AsyncMock,
+    ) as reconcile:
+        await runtime.reconcile(["XAUUSD", "EURUSD"])
 
-    await runtime.reconcile(["XAUUSD", "EURUSD"])
-
-    reconciliation.reconcile.assert_awaited_once_with(
+    reconcile.assert_awaited_once_with(
         ["XAUUSD", "EURUSD"],
     )
 
@@ -287,13 +292,22 @@ async def test_runtime_start_starts_runner_after_sync() -> None:
         runner,
     ) = make_runtime()
 
-    position_manager.sync_all = AsyncMock()
-    runner.start = AsyncMock()
+    with (
+        patch.object(
+            position_manager,
+            "sync_all",
+            new_callable=AsyncMock,
+        ) as sync_all,
+        patch.object(
+            runner,
+            "start",
+            new_callable=AsyncMock,
+        ) as runner_start,
+    ):
+        await runtime.start()
 
-    await runtime.start()
-
-    position_manager.sync_all.assert_awaited_once()
-    runner.start.assert_awaited_once()
+    sync_all.assert_awaited_once()
+    runner_start.assert_awaited_once()
 
     await runtime.stop()
 
@@ -337,7 +351,7 @@ async def test_runtime_metrics_track_successful_scan() -> None:
         _runner,
     ) = make_runtime()
 
-    scanner.scan.return_value = {
+    cast(AsyncMock, scanner.scan).return_value = {
         "XAUUSD": None,
     }
 
@@ -367,7 +381,7 @@ async def test_runtime_metrics_track_failed_scan() -> None:
         _runner,
     ) = make_runtime()
 
-    scanner.scan.side_effect = RuntimeError("scanner failed")
+    cast(AsyncMock, scanner.scan).side_effect = RuntimeError("scanner failed")
 
     with pytest.raises(
         RuntimeError,
@@ -397,9 +411,12 @@ async def test_runtime_metrics_track_reconciliation() -> None:
         _runner,
     ) = make_runtime()
 
-    reconciliation.reconcile = AsyncMock()
-
-    await runtime.reconcile()
+    with patch.object(
+        reconciliation,
+        "reconcile",
+        new_callable=AsyncMock,
+    ):
+        await runtime.reconcile()
 
     metrics = runtime.metrics()
 
@@ -419,11 +436,12 @@ async def test_runtime_metrics_track_reconciliation_failure() -> None:
         _runner,
     ) = make_runtime()
 
-    reconciliation.reconcile = AsyncMock(
+    with patch.object(
+        reconciliation,
+        "reconcile",
+        new_callable=AsyncMock,
         side_effect=RuntimeError("reconciliation failed"),
-    )
-
-    with pytest.raises(
+    ), pytest.raises(
         RuntimeError,
         match="reconciliation failed",
     ):
@@ -447,7 +465,7 @@ async def test_runtime_metrics_track_start_time() -> None:
         _runner,
     ) = make_runtime()
 
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     assert runtime.metrics().started_at is None
 
@@ -467,7 +485,7 @@ async def test_runtime_starts_quote_consumer() -> None:
         spec=MarketDataProvider,
     )
     scanner = AsyncMock(spec=DefaultMarketScanner)
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     stream_started = asyncio.Event()
 
@@ -527,7 +545,7 @@ async def test_runtime_quote_consumer_records_quotes() -> None:
         spec=MarketDataProvider,
     )
     scanner = AsyncMock(spec=DefaultMarketScanner)
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     first_timestamp = datetime(
         2026,
@@ -609,7 +627,7 @@ async def test_runtime_quote_consumer_records_stream_error() -> None:
         spec=MarketDataProvider,
     )
     scanner = AsyncMock(spec=DefaultMarketScanner)
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     error_recorded = asyncio.Event()
 
@@ -666,7 +684,7 @@ async def test_runtime_does_not_duplicate_quote_consumer() -> None:
         spec=MarketDataProvider,
     )
     scanner = AsyncMock(spec=DefaultMarketScanner)
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     stream_started = asyncio.Event()
 
@@ -720,7 +738,7 @@ async def test_runtime_stop_cancels_quote_consumer_before_disconnect() -> None:
         spec=MarketDataProvider,
     )
     scanner = AsyncMock(spec=DefaultMarketScanner)
-    scanner.scan.return_value = {}
+    cast(AsyncMock, scanner.scan).return_value = {}
 
     stream_cancelled = asyncio.Event()
 
@@ -848,11 +866,13 @@ async def test_runtime_subscribes_before_starting_runner() -> None:
     market_data_provider.subscribe_quotes.side_effect = (
         subscribe_quotes
     )
-    runner.start = AsyncMock(
+    with patch.object(
+        runner,
+        "start",
+        new_callable=AsyncMock,
         side_effect=start_runner,
-    )
-
-    await runtime.start()
+    ):
+        await runtime.start()
 
     assert calls == [
         "subscribe",
