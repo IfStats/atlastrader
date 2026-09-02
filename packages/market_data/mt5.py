@@ -26,6 +26,7 @@ class MT5MarketDataProvider(MarketDataProvider):
 
     def __init__(self) -> None:
         self._connected = False
+        self._owned_symbols: set[str] = set()
 
     async def connect(self) -> None:
         """Initialize the MetaTrader 5 terminal connection."""
@@ -47,6 +48,7 @@ class MT5MarketDataProvider(MarketDataProvider):
 
         mt5.shutdown()
         self._connected = False
+        self._owned_symbols.clear()
 
     async def get_quote(self, symbol: str) -> Quote:
         """Return the latest normalized quote."""
@@ -113,11 +115,14 @@ class MT5MarketDataProvider(MarketDataProvider):
                     int(rate["time"]),
                     tz=UTC,
                 ),
-                open=Decimal(str(rate["open"])),
-                high=Decimal(str(rate["high"])),
-                low=Decimal(str(rate["low"])),
-                close=Decimal(str(rate["close"])),
-                volume=Decimal(str(rate["tick_volume"])),
+                open=self._normalize_rate_value(rate, "open"),
+                high=self._normalize_rate_value(rate, "high"),
+                low=self._normalize_rate_value(rate, "low"),
+                close=self._normalize_rate_value(rate, "close"),
+                volume=self._normalize_rate_value(
+                    rate,
+                    "tick_volume",
+                ),
             )
             for rate in rates
         ]
@@ -134,32 +139,55 @@ class MT5MarketDataProvider(MarketDataProvider):
         """Ensure requested symbols are available in MetaTrader 5."""
         self._require_connection()
 
-        if not symbols:
+        normalized_symbols = list(dict.fromkeys(symbols))
+
+        if not normalized_symbols:
             raise ValueError("At least one symbol is required")
 
-        for symbol in symbols:
+        for symbol in normalized_symbols:
+            info = mt5.symbol_info(symbol)
+
+            if info is None:
+                error = mt5.last_error()
+                raise RuntimeError(
+                    f"Failed to retrieve symbol information "
+                    f"for {symbol}: {error}"
+                )
+
+            if info.visible:
+                continue
+
             if not mt5.symbol_select(symbol, True):
                 error = mt5.last_error()
                 raise RuntimeError(
                     f"Failed to subscribe to {symbol}: {error}"
                 )
 
+            self._owned_symbols.add(symbol)
+
     async def unsubscribe_quotes(
         self,
         symbols: list[str],
     ) -> None:
-        """Remove requested symbols from the MetaTrader 5 watchlist."""
+        """Remove only symbols selected by AtlasTrader."""
         self._require_connection()
 
         if not symbols:
             return
 
-        for symbol in symbols:
+        normalized_symbols = list(dict.fromkeys(symbols))
+
+        for symbol in normalized_symbols:
+            if symbol not in self._owned_symbols:
+                continue
+
             if not mt5.symbol_select(symbol, False):
                 error = mt5.last_error()
                 raise RuntimeError(
                     f"Failed to unsubscribe from {symbol}: {error}"
                 )
+
+            self._owned_symbols.remove(symbol)
 
     def stream_quotes(
         self,
@@ -200,7 +228,7 @@ class MT5MarketDataProvider(MarketDataProvider):
             await asyncio.sleep(interval_seconds)
 
     def _require_connection(self) -> None:
-        """Raise when the provider is not connected."""
+        """Raise when the MT5 terminal is not connected."""
         if not self._connected:
             raise RuntimeError(
                 "Market-data provider is not connected"

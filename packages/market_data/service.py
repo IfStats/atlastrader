@@ -28,13 +28,20 @@ class MarketDataService:
         self.candle_lookback = candle_lookback
         self.cache = cache or MarketDataCache()
 
-    async def get_market_state(self, symbol: str) -> MarketState:
-        """Fetch market data and build an indicator-enriched MarketState."""
+    async def get_quote(self, symbol: str) -> Quote:
+        """Return the latest normalized quote, using the quote cache."""
         quote = self.cache.get_quote(symbol)
 
-        if quote is None:
-            quote = await self.provider.get_quote(symbol)
-            self.cache.set_quote(quote)
+        if quote is not None:
+            return quote
+
+        quote = await self.provider.get_quote(symbol)
+        self.cache.set_quote(quote)
+        return quote
+
+    async def get_market_state(self, symbol: str) -> MarketState:
+        """Fetch market data and build an indicator-enriched MarketState."""
+        quote = await self.get_quote(symbol)
 
         end = quote.timestamp
         start = self._calculate_start_time(end)

@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -294,18 +295,20 @@ async def test_get_market_state_calculates_expected_indicators() -> None:
     )
 
     assert state.trend_score == pytest.approx(
-       0.0629874025,
-       rel=1e-5,
+        0.0629874025,
+        rel=1e-5,
     )
-    
+
     assert state.momentum_score == pytest.approx(
         0.1492537,
         rel=1e-5,
     )
+
     assert state.volatility_score == pytest.approx(
         0.2402985075,
         rel=1e-3,
     )
+
     assert state.volatility == Decimal("8.05")
 
 
@@ -411,3 +414,81 @@ async def test_get_market_state_refreshes_expired_quote() -> None:
     await service.get_market_state("XAUUSD")
 
     assert provider.get_quote.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_quotes_updates_quote_cache() -> None:
+    provider = make_provider()
+    cache = MarketDataCache()
+
+    quote = Quote(
+        symbol="XAUUSD",
+        bid=Decimal("2500.10"),
+        ask=Decimal("2500.30"),
+        timestamp=datetime.now(UTC),
+    )
+
+    async def quote_stream(
+        symbols: list[str],
+        *,
+        interval_seconds: float,
+    ) -> AsyncIterator[Quote]:
+        assert symbols == ["XAUUSD"]
+        assert interval_seconds == 0.25
+        yield quote
+
+    provider.stream_quotes.side_effect = quote_stream
+
+    service = MarketDataService(
+        provider,
+        cache=cache,
+    )
+
+    streamed_quotes = [
+        item
+        async for item in service.stream_quotes(
+            ["XAUUSD"],
+            interval_seconds=0.25,
+        )
+    ]
+
+    assert streamed_quotes == [quote]
+    assert cache.get_quote("XAUUSD") == quote
+
+
+@pytest.mark.asyncio
+async def test_streamed_quote_is_returned_from_cached_quote() -> None:
+    provider = make_provider()
+    cache = MarketDataCache()
+
+    quote = Quote(
+        symbol="EURUSD",
+        bid=Decimal("1.1050"),
+        ask=Decimal("1.1052"),
+        timestamp=datetime.now(UTC),
+    )
+
+    async def quote_stream(
+        symbols: list[str],
+        *,
+        interval_seconds: float,
+    ) -> AsyncIterator[Quote]:
+        yield quote
+
+    provider.stream_quotes.side_effect = quote_stream
+
+    service = MarketDataService(
+        provider,
+        cache=cache,
+    )
+
+    async for streamed_quote in service.stream_quotes(
+        ["EURUSD"],
+    ):
+        assert streamed_quote == quote
+        break
+
+    cached_quote = await service.get_quote("EURUSD")
+
+    assert cached_quote == quote
+    provider.get_quote.assert_not_awaited()
