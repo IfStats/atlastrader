@@ -103,6 +103,7 @@ def create_runtime(
     return TradingRuntime(
         execution_provider=execution,
         market_data_provider=market_data,
+        quote_stream_provider=normalized_market_data,
         portfolio=portfolio,
         position_manager=position_manager,
         reconciliation=reconciliation,

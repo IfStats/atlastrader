@@ -160,3 +160,17 @@ def test_factory_propagates_interval() -> None:
 
     assert runtime.interval_seconds == 10.0
     assert runtime.runner.interval_seconds == 10.0
+
+def test_factory_wires_normalized_market_data_as_quote_stream_provider() -> None:
+    execution_provider = MagicMock(spec=ExecutionProvider)
+    market_data_provider = MagicMock(spec=MarketDataProvider)
+
+    runtime = create_runtime(
+        symbols=["EURUSD"],
+        execution_provider=execution_provider,
+        market_data_provider=market_data_provider,
+    )
+
+    assert runtime.market_data_provider is market_data_provider
+    assert runtime.quote_stream_provider is not None
+    assert type(runtime.quote_stream_provider).__name__ == "MarketDataService"

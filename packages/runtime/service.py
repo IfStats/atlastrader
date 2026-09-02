@@ -8,6 +8,7 @@ from packages.engine.runner import MarketScannerRunner
 from packages.engine.scanner import DefaultMarketScanner
 from packages.execution.interfaces import ExecutionProvider
 from packages.market_data.base import MarketDataProvider
+from packages.market_data.service import MarketDataService
 from packages.portfolio.position_manager import PositionManager
 from packages.portfolio.reconciliation import PortfolioReconciliationService
 from packages.portfolio.service import PortfolioService
@@ -28,6 +29,7 @@ class TradingRuntime:
         symbols: list[str],
         interval_seconds: float = 5.0,
         market_data_provider: MarketDataProvider | None = None,
+        quote_stream_provider: MarketDataService | None = None,
     ) -> None:
         if not symbols:
             raise ValueError("At least one symbol is required")
@@ -39,6 +41,7 @@ class TradingRuntime:
 
         self.execution_provider = execution_provider
         self.market_data_provider = market_data_provider
+        self.quote_stream_provider = quote_stream_provider
         self.portfolio = portfolio
         self.position_manager = position_manager
         self.reconciliation = reconciliation
@@ -124,7 +127,7 @@ class TradingRuntime:
 
             await self.runner.start()
 
-            if self.market_data_provider is not None:
+            if self._quote_stream_source() is not None:
                 self._start_quote_consumer()
 
             self._started = True
@@ -232,9 +235,18 @@ class TradingRuntime:
 
         return result
 
+    def _quote_stream_source(
+        self,
+    ) -> MarketDataService | MarketDataProvider | None:
+        """Return the configured live quote stream source."""
+        if self.quote_stream_provider is not None:
+            return self.quote_stream_provider
+
+        return self.market_data_provider
+
     def _start_quote_consumer(self) -> None:
         """Start the live quote consumer in the background."""
-        if self.market_data_provider is None:
+        if self._quote_stream_source() is None:
             return
 
         if self.quote_stream_running:
@@ -266,11 +278,13 @@ class TradingRuntime:
 
     async def _consume_quotes(self) -> None:
         """Consume live quotes and maintain runtime telemetry."""
-        if self.market_data_provider is None:
+        source = self._quote_stream_source()
+
+        if source is None:
             return
 
         try:
-            async for quote in self.market_data_provider.stream_quotes(
+            async for quote in source.stream_quotes(
                 self.symbols,
                 interval_seconds=self.interval_seconds,
             ):
