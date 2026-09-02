@@ -62,12 +62,11 @@ class Instrument(BaseModel):
 
         return self
 
+
 class Quote(BaseModel):
     symbol: str
-
     bid: Decimal = Field(gt=0)
     ask: Decimal = Field(gt=0)
-
     timestamp: datetime
 
     @model_validator(mode="after")
@@ -91,14 +90,12 @@ class Quote(BaseModel):
 class Candle(BaseModel):
     symbol: str
     timeframe: Timeframe
-
     timestamp: datetime
 
     open: Decimal = Field(gt=0)
     high: Decimal = Field(gt=0)
     low: Decimal = Field(gt=0)
     close: Decimal = Field(gt=0)
-
     volume: Decimal = Field(default=Decimal(0), ge=0)
 
     @model_validator(mode="after")
@@ -144,13 +141,10 @@ class Candle(BaseModel):
         return self.close < self.open
 
 
-
 class MarketState(BaseModel):
     symbol: str
     timestamp: datetime
-
     timeframe: Timeframe
-
     price: Decimal = Field(gt=0)
 
     trend_score: float = Field(ge=-1, le=1)
@@ -158,28 +152,22 @@ class MarketState(BaseModel):
     volatility_score: float = Field(ge=0, le=1)
 
     volatility: Decimal = Field(ge=0)
-
     spread: Decimal = Field(ge=0)
 
     market_status: MarketStatus = MarketStatus.UNKNOWN
-
     session: str | None = None
-
     is_tradeable: bool = False
 
 
 class Signal(BaseModel):
     symbol: str
     direction: SignalDirection
-
     strategy: StrategyType
 
     status: SignalStatus = SignalStatus.CANDIDATE
-
     score: float = Field(ge=0, le=100)
 
     timestamp: datetime
-
     timeframe: Timeframe
 
     entry_price: Decimal | None = Field(default=None, gt=0)
@@ -187,7 +175,6 @@ class Signal(BaseModel):
     take_profit: Decimal | None = Field(default=None, gt=0)
 
     risk_reward_ratio: float | None = Field(default=None, gt=0)
-
     rationale: list[str] = Field(default_factory=list)
 
 
@@ -199,8 +186,8 @@ class Order(BaseModel):
 
     side: OrderSide
     order_type: OrderType
-    status: OrderStatus = OrderStatus.PENDING
 
+    status: OrderStatus = OrderStatus.PENDING
     quantity: Decimal = Field(gt=0)
 
     price: Decimal | None = Field(default=None, gt=0)
@@ -211,6 +198,7 @@ class Order(BaseModel):
 
     created_at: datetime
     updated_at: datetime
+
 
 class Position(BaseModel):
     """An open or closed trading position."""
@@ -233,3 +221,32 @@ class Position(BaseModel):
 
     realized_pnl: Decimal = Decimal(0)
     unrealized_pnl: Decimal = Decimal(0)
+
+
+class MT5AccountSnapshot(BaseModel):
+    """Read-only account state retrieved from MetaTrader 5."""
+
+    login: int
+    server: str
+    currency: str
+
+    balance: Decimal
+    equity: Decimal
+    margin: Decimal
+    free_margin: Decimal
+
+    leverage: int
+
+    trade_allowed: bool
+    trade_expert: bool
+
+
+class MT5TerminalSnapshot(BaseModel):
+    """Read-only terminal state retrieved from MetaTrader 5."""
+
+    connected: bool
+    trade_allowed: bool
+    tradeapi_disabled: bool
+
+    build: int
+    name: str

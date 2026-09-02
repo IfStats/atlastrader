@@ -11,7 +11,13 @@ from packages.core.enums import (
     OrderType,
     PositionStatus,
 )
-from packages.core.models import Instrument, Order, Position
+from packages.core.models import (
+    Instrument,
+    MT5AccountSnapshot,
+    MT5TerminalSnapshot,
+    Order,
+    Position,
+)
 from packages.execution.interfaces import ExecutionProvider
 
 
@@ -114,6 +120,53 @@ class MT5ExecutionProvider(ExecutionProvider):
             )
 
         return float(account.balance)
+
+    async def get_account_snapshot(self) -> MT5AccountSnapshot:
+        """Return a read-only snapshot of the current MT5 account."""
+        self._require_connection()
+
+        account = mt5.account_info()
+
+        if account is None:
+            raise RuntimeError(
+                "Unable to retrieve MT5 account information: "
+                f"{mt5.last_error()}"
+            )
+
+        return MT5AccountSnapshot(
+            login=int(account.login),
+            server=str(account.server),
+            currency=str(account.currency),
+            balance=Decimal(str(account.balance)),
+            equity=Decimal(str(account.equity)),
+            margin=Decimal(str(account.margin)),
+            free_margin=Decimal(str(account.margin_free)),
+            leverage=int(account.leverage),
+            trade_allowed=bool(account.trade_allowed),
+            trade_expert=bool(account.trade_expert),
+        )
+
+    async def get_terminal_snapshot(self) -> MT5TerminalSnapshot:
+        """Return a read-only snapshot of the MT5 terminal."""
+        self._require_connection()
+
+        terminal = mt5.terminal_info()
+
+        if terminal is None:
+            raise RuntimeError(
+                "Unable to retrieve MT5 terminal information: "
+                f"{mt5.last_error()}"
+            )
+
+        return MT5TerminalSnapshot(
+            connected=True,
+            trade_allowed=bool(terminal.trade_allowed),
+            tradeapi_disabled=bool(
+                getattr(terminal, "tradeapi_disabled", False)
+            ),
+            build=int(terminal.build),
+            name=str(terminal.name),
+        )
 
     async def get_instrument(self, symbol: str) -> Instrument:
         """Return broker metadata for an MT5 instrument."""
