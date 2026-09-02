@@ -1,4 +1,4 @@
-
+from datetime import UTC
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -258,5 +258,164 @@ async def test_runtime_start_starts_runner_after_sync() -> None:
 
     position_manager.sync_all.assert_awaited_once()
     runner.start.assert_awaited_once()
+
+    await runtime.stop()
+
+@pytest.mark.asyncio
+async def test_runtime_metrics_start_empty() -> None:
+    (
+        runtime,
+        _provider,
+        _portfolio,
+        _position_manager,
+        _reconciliation,
+        _scanner,
+        _runner,
+    ) = make_runtime()
+
+    metrics = runtime.metrics()
+
+    assert metrics.started_at is None
+    assert metrics.last_scan_at is None
+    assert metrics.last_successful_scan_at is None
+    assert metrics.last_reconciliation_at is None
+    assert metrics.last_error is None
+    assert metrics.scan_count == 0
+    assert metrics.successful_scan_count == 0
+    assert metrics.failed_scan_count == 0
+
+
+@pytest.mark.asyncio
+async def test_runtime_metrics_track_successful_scan() -> None:
+    (
+        runtime,
+        _provider,
+        _portfolio,
+        _position_manager,
+        _reconciliation,
+        scanner,
+        _runner,
+    ) = make_runtime()
+
+    scanner.scan.return_value = {
+        "XAUUSD": None,
+    }
+
+    result = await runtime.scan_once()
+    metrics = runtime.metrics()
+
+    assert result == {
+        "XAUUSD": None,
+    }
+    assert metrics.last_scan_at is not None
+    assert metrics.last_successful_scan_at is not None
+    assert metrics.last_error is None
+    assert metrics.scan_count == 1
+    assert metrics.successful_scan_count == 1
+    assert metrics.failed_scan_count == 0
+
+
+@pytest.mark.asyncio
+async def test_runtime_metrics_track_failed_scan() -> None:
+    (
+        runtime,
+        _provider,
+        _portfolio,
+        _position_manager,
+        _reconciliation,
+        scanner,
+        _runner,
+    ) = make_runtime()
+
+    scanner.scan.side_effect = RuntimeError("scanner failed")
+
+    with pytest.raises(
+        RuntimeError,
+        match="scanner failed",
+    ):
+        await runtime.scan_once()
+
+    metrics = runtime.metrics()
+
+    assert metrics.last_scan_at is not None
+    assert metrics.last_successful_scan_at is None
+    assert metrics.last_error == "scanner failed"
+    assert metrics.scan_count == 1
+    assert metrics.successful_scan_count == 0
+    assert metrics.failed_scan_count == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_metrics_track_reconciliation() -> None:
+    (
+        runtime,
+        _provider,
+        _portfolio,
+        _position_manager,
+        reconciliation,
+        _scanner,
+        _runner,
+    ) = make_runtime()
+
+    reconciliation.reconcile = AsyncMock()
+
+    await runtime.reconcile()
+
+    metrics = runtime.metrics()
+
+    assert metrics.last_reconciliation_at is not None
+    assert metrics.last_error is None
+
+
+@pytest.mark.asyncio
+async def test_runtime_metrics_track_reconciliation_failure() -> None:
+    (
+        runtime,
+        _provider,
+        _portfolio,
+        _position_manager,
+        reconciliation,
+        _scanner,
+        _runner,
+    ) = make_runtime()
+
+    reconciliation.reconcile = AsyncMock(
+        side_effect=RuntimeError("reconciliation failed"),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="reconciliation failed",
+    ):
+        await runtime.reconcile()
+
+    metrics = runtime.metrics()
+
+    assert metrics.last_reconciliation_at is None
+    assert metrics.last_error == "reconciliation failed"
+
+
+@pytest.mark.asyncio
+async def test_runtime_metrics_track_start_time() -> None:
+    (
+        runtime,
+        _provider,
+        _portfolio,
+        _position_manager,
+        _reconciliation,
+        scanner,
+        _runner,
+    ) = make_runtime()
+
+    scanner.scan.return_value = {}
+
+    assert runtime.metrics().started_at is None
+
+    await runtime.start()
+
+    metrics = runtime.metrics()
+
+    assert metrics.started_at is not None
+    assert metrics.started_at.tzinfo == UTC
 
     await runtime.stop()

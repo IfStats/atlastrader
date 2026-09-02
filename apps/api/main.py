@@ -17,6 +17,7 @@ from apps.api.schemas import (
     PortfolioResponse,
     PositionResponse,
     PositionsResponse,
+    RuntimeMetricsResponse,
     RuntimeStatusResponse,
 )
 from packages.core.config import MT5Settings, RiskSettings, RuntimeSettings
@@ -228,6 +229,28 @@ async def runtime_status(
         execution_connected,
     )
 
+@app.get(
+    "/runtime/metrics",
+    response_model=RuntimeMetricsResponse,
+    summary="Runtime telemetry",
+)
+async def runtime_metrics(
+    runtime: RuntimeDependency,
+) -> RuntimeMetricsResponse:
+    """Return runtime operational telemetry."""
+
+    metrics = runtime.metrics()
+
+    return RuntimeMetricsResponse(
+        started_at=metrics.started_at,
+        last_scan_at=metrics.last_scan_at,
+        last_successful_scan_at=metrics.last_successful_scan_at,
+        last_reconciliation_at=metrics.last_reconciliation_at,
+        last_error=metrics.last_error,
+        scan_count=metrics.scan_count,
+        successful_scan_count=metrics.successful_scan_count,
+        failed_scan_count=metrics.failed_scan_count,
+    )
 
 @app.post(
     "/runtime/start",

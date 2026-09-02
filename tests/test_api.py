@@ -420,3 +420,24 @@ def test_unexpected_error_returns_standard_error() -> None:
             "message": "An unexpected internal error occurred.",
         },
     }
+
+def test_runtime_metrics() -> None:
+    runtime = make_runtime()
+    app.state.runtime = runtime
+
+    client = TestClient(app)
+
+    response = client.get("/runtime/metrics")
+
+    assert response.status_code == 200
+
+    payload = response.json()
+
+    assert payload["started_at"] is None
+    assert payload["last_scan_at"] is None
+    assert payload["last_successful_scan_at"] is None
+    assert payload["last_reconciliation_at"] is None
+    assert payload["last_error"] is None
+    assert payload["scan_count"] == 0
+    assert payload["successful_scan_count"] == 0
+    assert payload["failed_scan_count"] == 0

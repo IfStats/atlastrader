@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 from packages.core.models import Order
 from packages.engine.runner import MarketScannerRunner
@@ -10,6 +11,7 @@ from packages.market_data.base import MarketDataProvider
 from packages.portfolio.position_manager import PositionManager
 from packages.portfolio.reconciliation import PortfolioReconciliationService
 from packages.portfolio.service import PortfolioService
+from packages.runtime.models import RuntimeMetrics
 
 
 class TradingRuntime:
@@ -51,6 +53,14 @@ class TradingRuntime:
         )
 
         self._started = False
+        self._started_at: datetime | None = None
+        self._last_scan_at: datetime | None = None
+        self._last_successful_scan_at: datetime | None = None
+        self._last_reconciliation_at: datetime | None = None
+        self._last_error: str | None = None
+        self._scan_count = 0
+        self._successful_scan_count = 0
+        self._failed_scan_count = 0
 
     @property
     def started(self) -> bool:
@@ -64,15 +74,29 @@ class TradingRuntime:
 
         return self._started
 
+    def metrics(self) -> RuntimeMetrics:
+        """Return a snapshot of runtime operational telemetry."""
+
+        return RuntimeMetrics(
+            started_at=self._started_at,
+            last_scan_at=self._last_scan_at,
+            last_successful_scan_at=self._last_successful_scan_at,
+            last_reconciliation_at=self._last_reconciliation_at,
+            last_error=self._last_error,
+            scan_count=self._scan_count,
+            successful_scan_count=self._successful_scan_count,
+            failed_scan_count=self._failed_scan_count,
+        )
+
     async def start(self) -> None:
         """Connect providers, synchronize state, and start scanning."""
 
         if self._started:
             return
 
-        await self.execution_provider.connect()
-
         try:
+            await self.execution_provider.connect()
+
             if self.market_data_provider is not None:
                 await self.market_data_provider.connect()
 
@@ -80,8 +104,12 @@ class TradingRuntime:
             await self.runner.start()
 
             self._started = True
+            self._started_at = datetime.now(UTC)
+            self._last_error = None
 
-        except Exception:
+        except Exception as exc:
+            self._last_error = str(exc)
+
             if self.market_data_provider is not None:
                 await self.market_data_provider.disconnect()
 
@@ -96,12 +124,17 @@ class TradingRuntime:
 
         try:
             await self.runner.stop()
+        except Exception as exc:
+            self._last_error = str(exc)
+            raise
         finally:
-            if self.market_data_provider is not None:
-                await self.market_data_provider.disconnect()
+            try:
+                if self.market_data_provider is not None:
+                    await self.market_data_provider.disconnect()
 
-            await self.execution_provider.disconnect()
-            self._started = False
+                await self.execution_provider.disconnect()
+            finally:
+                self._started = False
 
     async def reconcile(
         self,
@@ -111,7 +144,14 @@ class TradingRuntime:
 
         symbols = self.symbols if symbols is None else symbols
 
-        await self.reconciliation.reconcile(symbols)
+        try:
+            await self.reconciliation.reconcile(symbols)
+        except Exception as exc:
+            self._last_error = str(exc)
+            raise
+
+        self._last_reconciliation_at = datetime.now(UTC)
+        self._last_error = None
 
     async def run_forever(self) -> None:
         """Start the runtime and keep it alive until cancelled."""
@@ -127,4 +167,18 @@ class TradingRuntime:
     async def scan_once(self) -> dict[str, Order | None]:
         """Run one scanner cycle for the configured symbols."""
 
-        return await self.scanner.scan(self.symbols)
+        self._scan_count += 1
+        self._last_scan_at = datetime.now(UTC)
+
+        try:
+            result = await self.scanner.scan(self.symbols)
+        except Exception as exc:
+            self._failed_scan_count += 1
+            self._last_error = str(exc)
+            raise
+
+        self._successful_scan_count += 1
+        self._last_successful_scan_at = datetime.now(UTC)
+        self._last_error = None
+
+        return result

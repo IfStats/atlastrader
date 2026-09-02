@@ -12,6 +12,12 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class ReadyResponse(BaseModel):
+    """Readiness response."""
+
+    status: str
+
+
 class RuntimeStatusResponse(BaseModel):
     """Current runtime operational status."""
 
@@ -21,6 +27,19 @@ class RuntimeStatusResponse(BaseModel):
     execution_connected: bool
     symbols: list[str]
     interval_seconds: float = Field(gt=0)
+
+
+class RuntimeMetricsResponse(BaseModel):
+    """Current runtime telemetry."""
+
+    started_at: datetime | None
+    last_scan_at: datetime | None
+    last_successful_scan_at: datetime | None
+    last_reconciliation_at: datetime | None
+    last_error: str | None
+    scan_count: int = Field(ge=0)
+    successful_scan_count: int = Field(ge=0)
+    failed_scan_count: int = Field(ge=0)
 
 
 class PortfolioResponse(BaseModel):
