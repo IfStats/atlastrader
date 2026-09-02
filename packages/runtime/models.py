@@ -12,7 +12,10 @@ class RuntimeMetrics:
     last_scan_at: datetime | None
     last_successful_scan_at: datetime | None
     last_reconciliation_at: datetime | None
+    last_quote_at: datetime | None
     last_error: str | None
     scan_count: int
     successful_scan_count: int
     failed_scan_count: int
+    quote_count: int
+    quote_stream_error_count: int
