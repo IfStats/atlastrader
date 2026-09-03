@@ -24,6 +24,7 @@ from packages.execution.interfaces import ExecutionProvider
 class MT5PositionRecord(Protocol):
     """Fields required from an MT5 position record."""
 
+    ticket: int
     type: int
     time: int
     symbol: str
@@ -342,6 +343,7 @@ class MT5ExecutionProvider(ExecutionProvider):
                 "quantity": quantity,
                 "status": OrderStatus.FILLED,
                 "price": executed_price,
+                "broker_order_id": str(result.order),
                 "updated_at": datetime.now(UTC),
             }
         )
@@ -476,6 +478,7 @@ class MT5ExecutionProvider(ExecutionProvider):
 
         return Position(
             symbol=str(position.symbol),
+            broker_position_id=str(position.ticket),
             side=side,
             status=PositionStatus.OPEN,
             quantity=Decimal(str(position.volume)),

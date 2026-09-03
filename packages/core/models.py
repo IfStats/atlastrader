@@ -182,6 +182,7 @@ class Order(BaseModel):
     """An instruction that can be sent to an execution venue."""
 
     id: str
+    broker_order_id: str | None = None
     symbol: str
 
     side: OrderSide
@@ -196,6 +197,7 @@ class Order(BaseModel):
 
     signal_id: str | None = None
 
+
     created_at: datetime
     updated_at: datetime
 
@@ -204,6 +206,7 @@ class Position(BaseModel):
     """An open or closed trading position."""
 
     symbol: str
+    broker_position_id: str | None = None
 
     side: OrderSide
     status: PositionStatus = PositionStatus.OPEN
@@ -221,6 +224,8 @@ class Position(BaseModel):
 
     realized_pnl: Decimal = Decimal(0)
     unrealized_pnl: Decimal = Decimal(0)
+
+    
 
 
 class MT5AccountSnapshot(BaseModel):

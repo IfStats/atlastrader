@@ -27,6 +27,7 @@ class PositionManager:
 
         position = Position(
             symbol=order.symbol,
+            broker_position_id=None,
             side=order.side,
             quantity=order.quantity,
             entry_price=order.price,
