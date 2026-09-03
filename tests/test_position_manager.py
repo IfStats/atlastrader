@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -14,7 +15,7 @@ def make_position(
     quantity: Decimal = Decimal("0.10"),
     entry_price: Decimal = Decimal(3350),
 ) -> Position:
-    from datetime import UTC, datetime
+    
 
     now = datetime.now(UTC)
 
@@ -260,3 +261,31 @@ async def test_record_filled_order_requires_fill_price() -> None:
         match="Filled order must have a price",
     ):
         manager.record_filled_order(order)
+
+@pytest.mark.asyncio
+async def test_record_filled_order_does_not_assume_order_id_is_position_id() -> None:
+    manager, _, portfolio = make_manager()
+
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+
+    order = Order(
+        id="atlas-order-1",
+        broker_order_id="mt5-order-123",
+        symbol="XAUUSD",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        status=OrderStatus.FILLED,
+        quantity=Decimal("0.20"),
+        price=Decimal(3350),
+        stop_loss=Decimal(3345),
+        take_profit=Decimal(3360),
+        created_at=now,
+        updated_at=now,
+    )
+
+    position = manager.record_filled_order(order)
+
+    assert position.broker_position_id is None
+    assert portfolio.get_position("XAUUSD") == position
