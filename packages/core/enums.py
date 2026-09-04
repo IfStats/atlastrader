@@ -41,6 +41,10 @@ class PositionStatus(StrEnum):
     OPEN = "open"
     CLOSED = "closed"
 
+class TradeEntryType(StrEnum):
+    IN = "in"
+    OUT = "out"
+
 
 class SignalDirection(StrEnum):
     LONG = "long"

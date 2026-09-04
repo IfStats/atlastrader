@@ -1,10 +1,22 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 
-from packages.core.models import Instrument, Order, Position
+from packages.core.models import BrokerDeal, Instrument, Order, Position
 
 
 class ExecutionProvider(ABC):
     """Interface between AtlasTrader and an execution venue."""
+
+    @abstractmethod
+    async def get_trade_history(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        symbol: str | None = None,
+    ) -> list[BrokerDeal]:
+        """Return broker-reported trade deals within a time range."""
+        raise NotImplementedError
 
     @abstractmethod
     async def connect(self) -> None:

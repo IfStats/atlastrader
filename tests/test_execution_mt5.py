@@ -1,11 +1,18 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+import MetaTrader5 as mt5  # type: ignore[import-untyped]
 
-from packages.core.enums import AssetClass, OrderSide, OrderStatus, OrderType
+from packages.core.enums import (
+    AssetClass,
+    OrderSide,
+    OrderStatus,
+    OrderType,
+    TradeEntryType,
+)
 from packages.core.models import Instrument, Order
 from packages.execution.mt5 import MT5ExecutionProvider
 
@@ -158,3 +165,163 @@ async def test_submit_order_does_not_use_deal_as_broker_order_id() -> None:
 
     assert filled_order.broker_order_id != str(result.deal)
     assert filled_order.broker_order_id == str(result.order)
+
+@pytest.mark.asyncio
+async def test_get_trade_history_maps_mt5_entry_and_exit_deals() -> None:
+    provider = MT5ExecutionProvider()
+
+    start = datetime(2026, 9, 4, 10, 0, tzinfo=UTC)
+    end = datetime(2026, 9, 4, 11, 0, tzinfo=UTC)
+
+    entry_time = int(start.timestamp())
+    exit_time = int((start + timedelta(minutes=10)).timestamp())
+
+    deals = [
+        SimpleNamespace(
+            ticket=369296004,
+            order=528120643,
+            position_id=528120643,
+            symbol="XAUUSD",
+            type=mt5.DEAL_TYPE_BUY,
+            entry=mt5.DEAL_ENTRY_IN,
+            volume=0.01,
+            price=4377.97,
+            profit=0.0,
+            commission=-0.02,
+            swap=0.0,
+            time=entry_time,
+            comment="AtlasTrader",
+        ),
+        SimpleNamespace(
+            ticket=369299381,
+            order=528125150,
+            position_id=528120643,
+            symbol="XAUUSD",
+            type=mt5.DEAL_TYPE_SELL,
+            entry=mt5.DEAL_ENTRY_OUT,
+            volume=0.01,
+            price=4372.97,
+            profit=-5.0,
+            commission=-0.02,
+            swap=0.0,
+            time=exit_time,
+            comment="[sl 4372.97]",
+        ),
+    ]
+
+    with (
+        patch(
+            "packages.execution.mt5.mt5.terminal_info",
+            return_value=SimpleNamespace(),
+        ),
+        patch(
+            "packages.execution.mt5.mt5.history_deals_get",
+            return_value=deals,
+        ),
+    ):
+        provider._connected = True
+
+        history = await provider.get_trade_history(
+            start=start,
+            end=end,
+            symbol="XAUUSD",
+        )
+
+    assert len(history) == 2
+
+    entry = history[0]
+    assert entry.broker_deal_id == "369296004"
+    assert entry.broker_order_id == "528120643"
+    assert entry.broker_position_id == "528120643"
+    assert entry.side is OrderSide.BUY
+    assert entry.entry_type is TradeEntryType.IN
+    assert entry.quantity == Decimal("0.01")
+    assert entry.price == Decimal("4377.97")
+    assert entry.commission == Decimal("-0.02")
+
+    exit_deal = history[1]
+    assert exit_deal.broker_deal_id == "369299381"
+    assert exit_deal.broker_order_id == "528125150"
+    assert exit_deal.broker_position_id == "528120643"
+    assert exit_deal.side is OrderSide.SELL
+    assert exit_deal.entry_type is TradeEntryType.OUT
+    assert exit_deal.profit == Decimal("-5.0")
+    assert exit_deal.commission == Decimal("-0.02")
+    assert exit_deal.comment == "[sl 4372.97]"
+
+
+@pytest.mark.asyncio
+async def test_get_trade_history_filters_symbol() -> None:
+    provider = MT5ExecutionProvider()
+
+    start = datetime(2026, 9, 4, 10, 0, tzinfo=UTC)
+    end = datetime(2026, 9, 4, 11, 0, tzinfo=UTC)
+
+    deal = SimpleNamespace(
+        ticket=1001,
+        order=2001,
+        position_id=3001,
+        symbol="EURUSD",
+        type=mt5.DEAL_TYPE_BUY,
+        entry=mt5.DEAL_ENTRY_IN,
+        volume=0.10,
+        price=1.1700,
+        profit=0.0,
+        commission=0.0,
+        swap=0.0,
+        time=int(start.timestamp()),
+        comment="test",
+    )
+
+    with (
+        patch(
+            "packages.execution.mt5.mt5.terminal_info",
+            return_value=SimpleNamespace(),
+        ),
+        patch(
+            "packages.execution.mt5.mt5.history_deals_get",
+            return_value=[deal],
+        ),
+    ):
+        provider._connected = True
+
+        history = await provider.get_trade_history(
+            start=start,
+            end=end,
+            symbol="XAUUSD",
+        )
+
+    assert history == []
+
+
+@pytest.mark.asyncio
+async def test_get_trade_history_raises_when_mt5_history_fails() -> None:
+    provider = MT5ExecutionProvider()
+
+    start = datetime(2026, 9, 4, 10, 0, tzinfo=UTC)
+    end = datetime(2026, 9, 4, 11, 0, tzinfo=UTC)
+
+    with (
+        patch(
+            "packages.execution.mt5.mt5.terminal_info",
+            return_value=SimpleNamespace(),
+        ),
+        patch(
+            "packages.execution.mt5.mt5.history_deals_get",
+            return_value=None,
+        ),
+        patch(
+            "packages.execution.mt5.mt5.last_error",
+            return_value=(-1, "History unavailable"),
+        ),
+    ):
+        provider._connected = True
+
+        with pytest.raises(
+            RuntimeError,
+            match="Unable to retrieve MT5 trade history",
+        ):
+            await provider.get_trade_history(
+                start=start,
+                end=end,
+            )

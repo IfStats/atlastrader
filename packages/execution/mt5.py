@@ -10,8 +10,10 @@ from packages.core.enums import (
     OrderStatus,
     OrderType,
     PositionStatus,
+    TradeEntryType,
 )
 from packages.core.models import (
+    BrokerDeal,
     Instrument,
     MT5AccountSnapshot,
     MT5TerminalSnapshot,
@@ -383,6 +385,80 @@ class MT5ExecutionProvider(ExecutionProvider):
             self._to_position(position)
             for position in positions
         ]
+
+    async def get_trade_history(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        symbol: str | None = None,
+    ) -> list[BrokerDeal]:
+        """Return broker-reported MT5 trade deals within a time range."""
+
+        self._require_connection()
+
+        deals = mt5.history_deals_get(start, end)
+
+        if deals is None:
+            raise RuntimeError(
+                "Unable to retrieve MT5 trade history: "
+                f"{mt5.last_error()}"
+            )
+
+        broker_deals: list[BrokerDeal] = []
+
+        for deal in deals:
+            if symbol is not None and str(deal.symbol) != symbol:
+                continue
+
+            if deal.type == mt5.DEAL_TYPE_BUY:
+                side = OrderSide.BUY
+            elif deal.type == mt5.DEAL_TYPE_SELL:
+                side = OrderSide.SELL
+            else:
+                continue
+
+            if deal.entry == mt5.DEAL_ENTRY_IN:
+                entry_type = TradeEntryType.IN
+            elif deal.entry == mt5.DEAL_ENTRY_OUT:
+                entry_type = TradeEntryType.OUT
+            else:
+                continue
+
+            broker_deals.append(
+                BrokerDeal(
+                    broker_deal_id=str(deal.ticket),
+                    broker_order_id=(
+                        str(deal.order)
+                        if deal.order
+                        else None
+                    ),
+                    broker_position_id=(
+                        str(deal.position_id)
+                        if deal.position_id
+                        else None
+                    ),
+                    symbol=str(deal.symbol),
+                    side=side,
+                    entry_type=entry_type,
+                    quantity=Decimal(str(deal.volume)),
+                    price=Decimal(str(deal.price)),
+                    profit=Decimal(str(deal.profit)),
+                    commission=Decimal(str(deal.commission)),
+                    swap=Decimal(str(deal.swap)),
+                    timestamp=datetime.fromtimestamp(
+                        deal.time,
+                        tz=UTC,
+                    ),
+                    comment=(
+                        str(deal.comment)
+                        if deal.comment
+                        else None
+                    ),
+                )
+            )
+
+        return broker_deals
 
     @staticmethod
     def _validate_order_levels(order: Order) -> None:

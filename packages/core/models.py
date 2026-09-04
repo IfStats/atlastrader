@@ -14,6 +14,7 @@ from packages.core.enums import (
     SignalStatus,
     StrategyType,
     Timeframe,
+    TradeEntryType,
 )
 
 
@@ -224,6 +225,27 @@ class Position(BaseModel):
 
     realized_pnl: Decimal = Decimal(0)
     unrealized_pnl: Decimal = Decimal(0)
+
+class BrokerDeal(BaseModel):
+    """A broker-reported trade deal used for execution reconciliation."""
+
+    broker_deal_id: str
+    broker_order_id: str | None = None
+    broker_position_id: str | None = None
+
+    symbol: str
+    side: OrderSide
+    entry_type: TradeEntryType
+
+    quantity: Decimal = Field(gt=0)
+    price: Decimal = Field(gt=0)
+
+    profit: Decimal = Decimal(0)
+    commission: Decimal = Decimal(0)
+    swap: Decimal = Decimal(0)
+
+    timestamp: datetime
+    comment: str | None = None
 
     
 

@@ -1,7 +1,8 @@
+from datetime import datetime
 from decimal import Decimal
 
 from packages.core.enums import OrderStatus, PositionStatus
-from packages.core.models import Instrument, Order, Position
+from packages.core.models import BrokerDeal, Instrument, Order, Position
 from packages.execution.interfaces import ExecutionProvider
 
 
@@ -19,6 +20,7 @@ class MockExecutionProvider(ExecutionProvider):
         self._connected = False
         self._orders: dict[str, Order] = {}
         self._positions: dict[str, Position] = {}
+        self._trade_history: list[BrokerDeal] = []
 
     async def connect(self) -> None:
         self._connected = True
@@ -89,6 +91,21 @@ class MockExecutionProvider(ExecutionProvider):
             if position.status is PositionStatus.OPEN
         ]
 
+    async def get_trade_history(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        symbol: str | None = None,
+    ) -> list[BrokerDeal]:
+        """Return deterministic broker trade history within a time       range."""
+        return [
+            deal
+            for deal in self._trade_history
+            if start <= deal.timestamp <= end
+            and (symbol is None or deal.symbol == symbol)
+        ]
+
     async def close_position(self, symbol: str) -> Position:
         if symbol not in self._positions:
             raise KeyError(f"Position not found: {symbol}")
@@ -112,3 +129,7 @@ class MockExecutionProvider(ExecutionProvider):
     def add_position(self, position: Position) -> None:
         """Add a position to the mock execution venue."""
         self._positions[position.symbol] = position
+
+    def add_trade_deal(self, deal: BrokerDeal) -> None:
+        """Add a broker deal to the mock trade history."""
+        self._trade_history.append(deal)
