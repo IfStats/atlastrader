@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +21,7 @@ class NormalizedIntelligence(BaseModel):
     source_id: str
     provider: str | None = None
     headline: str
+    published_at: datetime
     event_type: str
     symbols: list[str] = Field(default_factory=list)
     asset_classes: list[str] = Field(default_factory=list)
@@ -235,6 +237,7 @@ class IntelligenceNormalizer:
             source_id=str(news.id),
             provider=news.provider,
             headline=headline,
+            published_at=news.published_at,
             event_type=event_type,
             symbols=symbols,
             asset_classes=list(news.asset_classes),

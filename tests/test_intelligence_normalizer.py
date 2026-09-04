@@ -74,10 +74,12 @@ def test_normalizes_news(normalizer: IntelligenceNormalizer) -> None:
     assert result.source_id == news.id
     assert result.provider == news.provider
     assert result.headline == news.headline
+    assert result.published_at == news.published_at
     assert "XAUUSD" in result.symbols
     assert result.sentiment_score > 0
     assert result.relevance_score >= 0
     assert result.impact_score >= 0
+    
 
 def test_neutral_news_produces_flat_direction(
     normalizer: IntelligenceNormalizer,
