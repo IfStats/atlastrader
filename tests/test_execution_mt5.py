@@ -3,8 +3,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import pytest
 import MetaTrader5 as mt5  # type: ignore[import-untyped]
+import pytest
 
 from packages.core.enums import (
     AssetClass,
