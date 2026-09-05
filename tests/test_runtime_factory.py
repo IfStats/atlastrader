@@ -5,6 +5,7 @@ import pytest
 
 from packages.core.config import MT5Settings, RiskSettings
 from packages.execution.interfaces import ExecutionProvider
+from packages.intelligence.interfaces import MarketIntelligenceProvider
 from packages.market_data.base import MarketDataProvider
 from packages.runtime.factory import create_runtime
 
@@ -174,3 +175,65 @@ def test_factory_wires_normalized_market_data_as_quote_stream_provider() -> None
     assert runtime.market_data_provider is market_data_provider
     assert runtime.quote_stream_provider is not None
     assert type(runtime.quote_stream_provider).__name__ == "MarketDataService"
+
+def test_factory_uses_standard_scanner_without_intelligence_provider() -> None:
+    execution = MagicMock(spec=ExecutionProvider)
+    market_data = MagicMock(spec=MarketDataProvider)
+
+    runtime = create_runtime(
+        symbols=["XAUUSD"],
+        settings=make_risk_settings(),
+        execution_provider=execution,
+        market_data_provider=market_data,
+    )
+
+    assert runtime.scanner.autonomous is False
+    assert runtime.scanner.engine.market_context_provider is None
+
+
+def test_factory_wires_autonomous_scanner_with_intelligence_provider() -> None:
+    execution = MagicMock(spec=ExecutionProvider)
+    market_data = MagicMock(spec=MarketDataProvider)
+    intelligence_provider = MagicMock(spec=MarketIntelligenceProvider)
+
+    runtime = create_runtime(
+        symbols=["XAUUSD"],
+        settings=make_risk_settings(),
+        execution_provider=execution,
+        market_data_provider=market_data,
+        intelligence_providers=[intelligence_provider],
+    )
+
+    assert runtime.scanner.autonomous is True
+
+    context_provider = runtime.scanner.engine.market_context_provider
+
+    assert context_provider is not None
+    assert (
+        context_provider.__class__.__name__
+        == "DefaultMarketContextProvider"
+    )
+
+
+def test_factory_preserves_multiple_intelligence_providers() -> None:
+    execution = MagicMock(spec=ExecutionProvider)
+    market_data = MagicMock(spec=MarketDataProvider)
+
+    provider_one = MagicMock(spec=MarketIntelligenceProvider)
+    provider_two = MagicMock(spec=MarketIntelligenceProvider)
+
+    runtime = create_runtime(
+        symbols=["XAUUSD"],
+        settings=make_risk_settings(),
+        execution_provider=execution,
+        market_data_provider=market_data,
+        intelligence_providers=[provider_one, provider_two],
+    )
+
+    context_provider = runtime.scanner.engine.market_context_provider
+
+    assert context_provider is not None
+    assert context_provider.intelligence_gateway.providers == [
+        provider_one,
+        provider_two,
+    ]

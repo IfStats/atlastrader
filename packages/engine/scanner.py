@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from collections.abc import Awaitable, Callable
 
@@ -15,10 +17,12 @@ class DefaultMarketScanner:
         *,
         registry: InstrumentRegistry | None = None,
         on_error: Callable[[str, Exception], Awaitable[None]] | None = None,
+        autonomous: bool = False,
     ) -> None:
         self.engine = engine
         self.registry = registry
         self.on_error = on_error
+        self.autonomous = autonomous
 
     async def scan(
         self,
@@ -51,7 +55,11 @@ class DefaultMarketScanner:
             symbol: str,
         ) -> tuple[str, Order | None]:
             try:
-                order = await self.engine.process_symbol(symbol)
+                if self.autonomous:
+                    order = await self.engine.process_autonomous_symbol(symbol)
+                else:
+                    order = await self.engine.process_symbol(symbol)
+
                 return symbol, order
             except (KeyError, RuntimeError) as exc:
                 if self.on_error is not None:

@@ -4,10 +4,13 @@ from decimal import Decimal
 
 from packages.core.config import MT5Settings, RiskSettings
 from packages.core.enums import Timeframe
+from packages.engine.market_context_provider import DefaultMarketContextProvider
 from packages.engine.scanner import DefaultMarketScanner
 from packages.engine.service import DefaultTradingEngine
 from packages.execution.interfaces import ExecutionProvider
 from packages.execution.mt5 import MT5ExecutionProvider
+from packages.intelligence.gateway import MarketIntelligenceGateway
+from packages.intelligence.interfaces import MarketIntelligenceProvider
 from packages.market_data.base import MarketDataProvider
 from packages.market_data.mt5 import MT5MarketDataProvider
 from packages.market_data.service import MarketDataService
@@ -28,6 +31,7 @@ def create_runtime(
     mt5_settings: MT5Settings | None = None,
     execution_provider: ExecutionProvider | None = None,
     market_data_provider: MarketDataProvider | None = None,
+    intelligence_providers: list[MarketIntelligenceProvider] | None = None,
     balance: Decimal = Decimal(0),
     timeframe: Timeframe = Timeframe.M5,
     candle_lookback: int = 20,
@@ -86,19 +90,45 @@ def create_runtime(
     risk_manager = DefaultRiskManager(settings)
     position_sizer = DefaultPositionSizer()
 
-    engine = DefaultTradingEngine(
-        strategy_service=strategy_service,
-        risk_manager=risk_manager,
-        execution_provider=execution,
-        position_sizer=position_sizer,
-        risk_settings=settings,
-        portfolio=portfolio,
-        market_data_provider=normalized_market_data,
-    )
+    if intelligence_providers:
+        intelligence_gateway = MarketIntelligenceGateway(
+            providers=intelligence_providers,
+        )
 
-    scanner = DefaultMarketScanner(
-        engine,
-    )
+        market_context_provider = DefaultMarketContextProvider(
+            market_data_service=normalized_market_data,
+            intelligence_gateway=intelligence_gateway,
+        )
+
+        engine = DefaultTradingEngine(
+            strategy_service=strategy_service,
+            risk_manager=risk_manager,
+            execution_provider=execution,
+            position_sizer=position_sizer,
+            risk_settings=settings,
+            portfolio=portfolio,
+            market_data_provider=normalized_market_data,
+            market_context_provider=market_context_provider,
+        )
+
+        scanner = DefaultMarketScanner(
+            engine,
+            autonomous=True,
+        )
+    else:
+        engine = DefaultTradingEngine(
+            strategy_service=strategy_service,
+            risk_manager=risk_manager,
+            execution_provider=execution,
+            position_sizer=position_sizer,
+            risk_settings=settings,
+            portfolio=portfolio,
+            market_data_provider=normalized_market_data,
+        )
+
+        scanner = DefaultMarketScanner(
+            engine,
+        )
 
     return TradingRuntime(
         execution_provider=execution,

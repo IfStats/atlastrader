@@ -13,8 +13,12 @@ from packages.core.enums import (
 )
 from packages.core.models import Instrument, MarketState, Order, Signal
 from packages.core.trading_journal import TradeDecision
+from packages.engine.autonomous_decision import (
+    AutonomousDecisionEngine,
+)
 from packages.engine.interfaces import TradingEngine
 from packages.engine.journal import TradeJournal
+from packages.engine.market_context import MarketContext
 from packages.execution.interfaces import ExecutionProvider
 from packages.portfolio.instrument_registry import InstrumentRegistry
 from packages.portfolio.position_manager import PositionManager
@@ -31,6 +35,12 @@ class MarketStateProvider(Protocol):
         """Return the normalized market state for a symbol."""
         ...
 
+class MarketContextProvider(Protocol):
+    """Interface required by the engine for autonomous market context."""
+
+    async def get_market_context(self, symbol: str) -> MarketContext:
+        """Return combined technical and intelligence context for a symbol."""
+        ...
 
 class DefaultTradingEngine(TradingEngine):
     """Coordinates market analysis, risk, sizing, execution, and portfolio state."""
@@ -46,6 +56,8 @@ class DefaultTradingEngine(TradingEngine):
         portfolio: PortfolioService,
         position_manager: PositionManager | None = None,
         market_data_provider: MarketStateProvider | None = None,
+        market_context_provider: MarketContextProvider | None = None,
+        autonomous_decision_engine: AutonomousDecisionEngine | None = None,
         instrument_registry: InstrumentRegistry | None = None,
         journal: TradeJournal | None = None,
     ) -> None:
@@ -60,6 +72,10 @@ class DefaultTradingEngine(TradingEngine):
             portfolio=portfolio,
         )
         self.market_data_provider = market_data_provider
+        self.market_context_provider = market_context_provider
+        self.autonomous_decision_engine = (
+            autonomous_decision_engine or AutonomousDecisionEngine()
+        )
         self.instrument_registry = instrument_registry
         self.journal = journal
 
@@ -76,6 +92,37 @@ class DefaultTradingEngine(TradingEngine):
         market_state = await self.market_data_provider.get_market_state(symbol)
 
         return await self.process_market_state(market_state)
+
+    async def process_autonomous_symbol(
+        self,
+        symbol: str,
+) -> Order | None:
+     """Evaluate a symbol through the autonomous decision pipeline."""
+
+     if self.market_context_provider is None:
+        raise RuntimeError(
+            "Market context provider is required to process a symbol "
+            "autonomously"
+        )
+
+     context = await self.market_context_provider.get_market_context(symbol)
+     autonomous_decision = self.autonomous_decision_engine.evaluate(context)
+
+     if not autonomous_decision.approved:
+        return None
+
+     signal = self.strategy_service.select_signal(context.market_state)
+
+     if signal is None:
+        return None
+
+     if signal.direction is not autonomous_decision.decision:
+        return None
+
+     return await self.execute_signal(
+        signal,
+        context.market_state,
+    )
 
     async def process_market_state(
         self,
@@ -328,4 +375,3 @@ class DefaultTradingEngine(TradingEngine):
             created_at=now,
             updated_at=now,
         )
-
