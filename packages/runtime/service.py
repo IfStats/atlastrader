@@ -7,6 +7,7 @@ from packages.core.models import Order, Quote
 from packages.engine.runner import MarketScannerRunner
 from packages.engine.scanner import DefaultMarketScanner
 from packages.execution.interfaces import ExecutionProvider
+from packages.intelligence.interfaces import MarketIntelligenceProvider
 from packages.market_data.base import MarketDataProvider
 from packages.market_data.service import MarketDataService
 from packages.portfolio.position_manager import PositionManager
@@ -29,18 +30,18 @@ class TradingRuntime:
         symbols: list[str],
         interval_seconds: float = 5.0,
         market_data_provider: MarketDataProvider | None = None,
+        intelligence_providers: list[MarketIntelligenceProvider] | None = None,
         quote_stream_provider: MarketDataService | None = None,
     ) -> None:
         if not symbols:
             raise ValueError("At least one symbol is required")
 
         if interval_seconds <= 0:
-            raise ValueError(
-                "interval_seconds must be greater than zero"
-            )
+            raise ValueError("interval_seconds must be greater than zero")
 
         self.execution_provider = execution_provider
         self.market_data_provider = market_data_provider
+        self.intelligence_providers = list(intelligence_providers or [])
         self.quote_stream_provider = quote_stream_provider
         self.portfolio = portfolio
         self.position_manager = position_manager
@@ -58,6 +59,9 @@ class TradingRuntime:
         self._started = False
         self._market_data_subscribed = False
         self._quote_task: asyncio.Task[None] | None = None
+        self._started_intelligence_providers: list[
+            MarketIntelligenceProvider
+        ] = []
 
         self._started_at: datetime | None = None
         self._last_scan_at: datetime | None = None
@@ -85,10 +89,7 @@ class TradingRuntime:
     @property
     def quote_stream_running(self) -> bool:
         """Return whether the live quote consumer is running."""
-        return (
-            self._quote_task is not None
-            and not self._quote_task.done()
-        )
+        return self._quote_task is not None and not self._quote_task.done()
 
     def metrics(self) -> RuntimeMetrics:
         """Return a snapshot of runtime operational telemetry."""
@@ -113,6 +114,7 @@ class TradingRuntime:
 
         try:
             await self.execution_provider.connect()
+            await self._start_intelligence_providers()
 
             if self.market_data_provider is not None:
                 await self.market_data_provider.connect()
@@ -120,9 +122,7 @@ class TradingRuntime:
             await self.position_manager.sync_all()
 
             if self.market_data_provider is not None:
-                await self.market_data_provider.subscribe_quotes(
-                    self.symbols,
-                )
+                await self.market_data_provider.subscribe_quotes(self.symbols)
                 self._market_data_subscribed = True
 
             await self.runner.start()
@@ -136,7 +136,6 @@ class TradingRuntime:
 
         except Exception as exc:
             self._last_error = str(exc)
-
             await self._stop_quote_consumer()
 
             if (
@@ -153,6 +152,7 @@ class TradingRuntime:
             if self.market_data_provider is not None:
                 await self.market_data_provider.disconnect()
 
+            await self._stop_intelligence_providers()
             await self.execution_provider.disconnect()
             raise
 
@@ -187,9 +187,12 @@ class TradingRuntime:
                             await self.market_data_provider.disconnect()
                     finally:
                         try:
-                            await self.execution_provider.disconnect()
+                            await self._stop_intelligence_providers()
                         finally:
-                            self._started = False
+                            try:
+                                await self.execution_provider.disconnect()
+                            finally:
+                                self._started = False
 
     async def reconcile(
         self,
@@ -235,6 +238,40 @@ class TradingRuntime:
 
         return result
 
+    async def _start_intelligence_providers(self) -> None:
+        """Start configured intelligence providers with rollback on failure."""
+        self._started_intelligence_providers = []
+
+        try:
+            for provider in self.intelligence_providers:
+                start = getattr(provider, "start", None)
+
+                if start is None:
+                    continue
+
+                await start()
+                self._started_intelligence_providers.append(provider)
+
+        except Exception:
+            await self._stop_intelligence_providers()
+            raise
+
+    async def _stop_intelligence_providers(self) -> None:
+        """Close intelligence providers that were successfully started."""
+        providers = list(reversed(self._started_intelligence_providers))
+        self._started_intelligence_providers = []
+
+        for provider in providers:
+            close = getattr(provider, "close", None)
+
+            if close is None:
+                continue
+
+            try:
+                await close()
+            except (RuntimeError, ValueError, OSError) as exc:
+                self._last_error = str(exc)
+
     def _quote_stream_source(
         self,
     ) -> MarketDataService | MarketDataProvider | None:
@@ -252,9 +289,7 @@ class TradingRuntime:
         if self.quote_stream_running:
             return
 
-        self._quote_task = asyncio.create_task(
-            self._consume_quotes(),
-        )
+        self._quote_task = asyncio.create_task(self._consume_quotes())
 
     async def _stop_quote_consumer(self) -> None:
         """Stop the live quote consumer gracefully."""

@@ -7,17 +7,42 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from packages.core.config import MT5Settings, RiskSettings, RuntimeSettings
+from packages.core.config import (
+    IntelligenceSettings,
+    MT5Settings,
+    RiskSettings,
+    RuntimeSettings,
+)
 from packages.core.enums import MarketStatus, OrderSide, OrderType, Timeframe
 from packages.core.models import MarketState, Order
 from packages.execution.mt5 import MT5ExecutionProvider
 from packages.execution.preflight import MT5Preflight
 from packages.execution.service import ExecutionService
+from packages.intelligence.finnhub import FinnhubMarketIntelligenceProvider
 from packages.market_data.mt5 import MT5MarketDataProvider
 from packages.portfolio.models import PortfolioSnapshot
 from packages.risk.manager import DefaultRiskManager
 from packages.runtime.factory import create_runtime
 from packages.runtime.service import TradingRuntime
+
+
+def _build_intelligence_providers(
+    settings: IntelligenceSettings,
+) -> list[FinnhubMarketIntelligenceProvider]:
+    """Build enabled external market-intelligence providers."""
+    if not settings.enabled or not settings.has_finnhub_credentials():
+        return []
+
+    return [
+        FinnhubMarketIntelligenceProvider(
+            api_key=settings.finnhub_api_key or "",
+            base_url=settings.finnhub_base_url,
+            timeout_seconds=settings.request_timeout_seconds,
+            max_retries=settings.max_retries,
+            backoff_seconds=settings.retry_backoff_seconds,
+        )
+    ]
+
 
 __all__ = [
     "MT5Settings",
@@ -399,6 +424,10 @@ async def run_runtime() -> None:
     runtime_settings = RuntimeSettings()
     risk_settings = RiskSettings()
     mt5_settings = MT5Settings()
+    intelligence_settings = IntelligenceSettings()
+    intelligence_providers = _build_intelligence_providers(
+        intelligence_settings,
+    )
 
     symbols = runtime_settings.get_symbols()
 
@@ -407,6 +436,7 @@ async def run_runtime() -> None:
         settings=risk_settings,
         mt5_settings=mt5_settings,
         balance=runtime_settings.initial_balance,
+        intelligence_providers=intelligence_providers,
     )
 
     try:

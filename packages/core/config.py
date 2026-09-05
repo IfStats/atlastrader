@@ -83,6 +83,7 @@ class IntelligenceSettings(BaseSettings):
         extra="ignore",
     )
 
+    enabled: bool = False
     finnhub_api_key: str | None = None
     finnhub_base_url: str = "https://finnhub.io/api/v1"
     request_timeout_seconds: float = Field(
@@ -103,6 +104,69 @@ class IntelligenceSettings(BaseSettings):
         """Return whether a Finnhub API key is configured."""
 
         return bool(self.finnhub_api_key)
+
+class PolygonSettings(BaseSettings):
+    """Polygon market-data provider configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="ATLAS_POLYGON_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    enabled: bool = False
+    api_key: str | None = None
+    base_url: str = "https://api.polygon.io"
+    request_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+    )
+    retry_backoff_seconds: float = Field(
+        default=0.5,
+        gt=0,
+    )
+
+    def has_credentials(self) -> bool:
+        """Return whether a Polygon API key is configured."""
+
+        return bool(self.api_key)
+
+
+class TwelveDataSettings(BaseSettings):
+    """Twelve Data market-data provider configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="ATLAS_TWELVEDATA_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    enabled: bool = False
+    api_key: str | None = None
+    base_url: str = "https://api.twelvedata.com"
+    request_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+    )
+    retry_backoff_seconds: float = Field(
+        default=0.5,
+        gt=0,
+    )
+
+    def has_credentials(self) -> bool:
+        """Return whether a Twelve Data API key is configured."""
+
+        return bool(self.api_key)
 
 
 class RuntimeSettings(BaseSettings):

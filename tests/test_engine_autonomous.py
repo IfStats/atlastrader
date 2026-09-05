@@ -140,6 +140,7 @@ def make_engine(
         max_open_positions=5,
         max_daily_loss=Decimal("0.05"),
         min_risk_reward_ratio=Decimal("1.5"),
+        trading_enabled=True,
     )
 
     strategy_service = StrategyService(

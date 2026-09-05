@@ -20,13 +20,38 @@ from apps.api.schemas import (
     RuntimeMetricsResponse,
     RuntimeStatusResponse,
 )
-from packages.core.config import MT5Settings, RiskSettings, RuntimeSettings
+from packages.core.config import (
+    IntelligenceSettings,
+    MT5Settings,
+    RiskSettings,
+    RuntimeSettings,
+)
 from packages.core.enums import Timeframe
 from packages.core.models import Position
+from packages.intelligence.finnhub import FinnhubMarketIntelligenceProvider
 from packages.runtime.factory import create_runtime
 from packages.runtime.service import TradingRuntime
 
 RuntimeDependency = Annotated[TradingRuntime, Depends(get_runtime)]
+
+
+def _build_intelligence_providers(
+    settings: IntelligenceSettings,
+) -> list[FinnhubMarketIntelligenceProvider]:
+    """Build enabled external market-intelligence providers."""
+    if not settings.enabled or not settings.has_finnhub_credentials():
+        return []
+
+    return [
+        FinnhubMarketIntelligenceProvider(
+            api_key=settings.finnhub_api_key or "",
+            base_url=settings.finnhub_base_url,
+            timeout_seconds=settings.request_timeout_seconds,
+            max_retries=settings.max_retries,
+            backoff_seconds=settings.retry_backoff_seconds,
+        )
+    ]
+
 
 
 def build_runtime() -> TradingRuntime:
@@ -35,6 +60,10 @@ def build_runtime() -> TradingRuntime:
     runtime_settings = RuntimeSettings()
     risk_settings = RiskSettings()
     mt5_settings = MT5Settings()
+    intelligence_settings = IntelligenceSettings()
+    intelligence_providers = _build_intelligence_providers(
+        intelligence_settings,
+    )
 
     return create_runtime(
         symbols=runtime_settings.get_symbols(),
@@ -44,6 +73,7 @@ def build_runtime() -> TradingRuntime:
         timeframe=Timeframe(runtime_settings.timeframe),
         candle_lookback=runtime_settings.candle_lookback,
         interval_seconds=runtime_settings.scan_interval_seconds,
+        intelligence_providers=intelligence_providers,
     )
 
 
