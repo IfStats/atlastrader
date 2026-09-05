@@ -74,6 +74,37 @@ class MT5Settings(BaseSettings):
         )
 
 
+class IntelligenceSettings(BaseSettings):
+    """External market-intelligence provider configuration."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="ATLAS_INTELLIGENCE_",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    finnhub_api_key: str | None = None
+    finnhub_base_url: str = "https://finnhub.io/api/v1"
+    request_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+    )
+    retry_backoff_seconds: float = Field(
+        default=0.5,
+        gt=0,
+    )
+
+    def has_finnhub_credentials(self) -> bool:
+        """Return whether a Finnhub API key is configured."""
+
+        return bool(self.finnhub_api_key)
+
+
 class RuntimeSettings(BaseSettings):
     """AtlasTrader application runtime configuration."""
 
