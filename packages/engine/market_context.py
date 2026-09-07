@@ -4,23 +4,36 @@ from pydantic import BaseModel, Field
 
 from packages.core.enums import SignalDirection
 from packages.core.models import MarketState
-from packages.intelligence.impact import MarketImpactContext, SymbolImpact
+from packages.intelligence.impact import (
+    MarketImpactContext,
+    SymbolImpact,
+)
+from packages.market_data.quality import (
+    MarketDataQualityDecision,
+)
 
 
 class MarketContext(BaseModel):
-    """Combined technical and external-intelligence market context."""
+    """Combined technical, intelligence, and market-data quality context."""
 
     market_state: MarketState
     intelligence: MarketImpactContext
-    combined_directional_score: float = Field(ge=-1.0, le=1.0)
-    combined_confidence: float = Field(ge=0.0, le=1.0)
+    combined_directional_score: float = Field(
+        ge=-1.0,
+        le=1.0,
+    )
+    combined_confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
     direction: SignalDirection
     is_tradeable: bool
+    market_data_quality: MarketDataQualityDecision | None = None
     rationale: list[str] = Field(default_factory=list)
 
 
 class MarketContextEngine:
-    """Combine technical market state with symbol-specific intelligence."""
+    """Combine technical, intelligence, and data-quality context."""
 
     def __init__(
         self,
@@ -29,18 +42,33 @@ class MarketContextEngine:
         intelligence_weight: float = 0.40,
     ) -> None:
         if technical_weight < 0.0:
-            raise ValueError("technical_weight must be non-negative")
+            raise ValueError(
+                "technical_weight must be non-negative"
+            )
 
         if intelligence_weight < 0.0:
-            raise ValueError("intelligence_weight must be non-negative")
+            raise ValueError(
+                "intelligence_weight must be non-negative"
+            )
 
-        total_weight = technical_weight + intelligence_weight
+        total_weight = (
+            technical_weight
+            + intelligence_weight
+        )
 
         if total_weight <= 0.0:
-            raise ValueError("At least one context weight must be positive")
+            raise ValueError(
+                "At least one context weight must be positive"
+            )
 
-        self.technical_weight = technical_weight / total_weight
-        self.intelligence_weight = intelligence_weight / total_weight
+        self.technical_weight = (
+            technical_weight
+            / total_weight
+        )
+        self.intelligence_weight = (
+            intelligence_weight
+            / total_weight
+        )
 
     def build(
         self,
@@ -48,7 +76,9 @@ class MarketContextEngine:
         symbol: str,
         market_state: MarketState,
         intelligence: MarketImpactContext,
+        market_data_quality: MarketDataQualityDecision | None = None,
     ) -> MarketContext:
+        """Build the combined autonomous market context."""
         if market_state.symbol != symbol:
             raise ValueError(
                 "symbol must match market_state.symbol"
@@ -76,27 +106,61 @@ class MarketContextEngine:
             )
 
         combined_score = (
-            technical_score * self.technical_weight
-            + intelligence_score * self.intelligence_weight
+            technical_score
+            * self.technical_weight
+            + intelligence_score
+            * self.intelligence_weight
         )
 
-        combined_score = max(-1.0, min(1.0, combined_score))
+        combined_score = max(
+            -1.0,
+            min(
+                1.0,
+                combined_score,
+            ),
+        )
 
         combined_confidence = (
-            abs(technical_score) * self.technical_weight
-            + intelligence_confidence * self.intelligence_weight
+            abs(technical_score)
+            * self.technical_weight
+            + intelligence_confidence
+            * self.intelligence_weight
         )
 
         combined_confidence = max(
             0.0,
-            min(1.0, combined_confidence),
+            min(
+                1.0,
+                combined_confidence,
+            ),
         )
 
-        direction = self._score_to_direction(combined_score)
+        if market_data_quality is not None:
+            combined_confidence *= (
+                market_data_quality.confidence_multiplier
+            )
+
+        combined_confidence = max(
+            0.0,
+            min(
+                1.0,
+                combined_confidence,
+            ),
+        )
+
+        direction = self._score_to_direction(
+            combined_score
+        )
+
+        data_quality_permits_trade = (
+            market_data_quality is None
+            or market_data_quality.trading_permitted
+        )
 
         is_tradeable = (
             market_state.is_tradeable
             and intelligence.event_risk_score < 1.0
+            and data_quality_permits_trade
         )
 
         rationale = [
@@ -104,10 +168,39 @@ class MarketContextEngine:
             f"technical_score={technical_score:.3f}",
             f"intelligence_score={intelligence_score:.3f}",
             f"combined_score={combined_score:.3f}",
-            f"combined_confidence={combined_confidence:.3f}",
-            f"event_risk_score={intelligence.event_risk_score:.3f}",
+            (
+                "combined_confidence="
+                f"{combined_confidence:.3f}"
+            ),
+            (
+                "event_risk_score="
+                f"{intelligence.event_risk_score:.3f}"
+            ),
             f"is_tradeable={is_tradeable}",
         ]
+
+        if market_data_quality is not None:
+            rationale.extend(
+                [
+                    (
+                        "market_data_quality="
+                        f"{market_data_quality.status.value}"
+                    ),
+                    (
+                        "market_data_confidence_multiplier="
+                        f"{market_data_quality.confidence_multiplier:.3f}"
+                    ),
+                    (
+                        "market_data_trading_permitted="
+                        f"{market_data_quality.trading_permitted}"
+                    ),
+                ]
+            )
+
+            rationale.extend(
+                f"market_data_reason={reason}"
+                for reason in market_data_quality.reasons
+            )
 
         return MarketContext(
             market_state=market_state,
@@ -116,6 +209,7 @@ class MarketContextEngine:
             combined_confidence=combined_confidence,
             direction=direction,
             is_tradeable=is_tradeable,
+            market_data_quality=market_data_quality,
             rationale=rationale,
         )
 
@@ -125,6 +219,7 @@ class MarketContextEngine:
         symbol: str,
         intelligence: MarketImpactContext,
     ) -> SymbolImpact | None:
+        """Return the intelligence impact belonging to the symbol."""
         for impact in intelligence.impacts:
             if impact.symbol == symbol:
                 return impact
@@ -132,7 +227,10 @@ class MarketContextEngine:
         return None
 
     @staticmethod
-    def _score_to_direction(score: float) -> SignalDirection:
+    def _score_to_direction(
+        score: float,
+    ) -> SignalDirection:
+        """Map the directional score into a trading direction."""
         if score > 0:
             return SignalDirection.LONG
 
