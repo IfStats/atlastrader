@@ -146,3 +146,30 @@ class LearningRecord(BaseModel):
             )
 
         return self
+
+class LearningDatasetAssembly(BaseModel):
+    """Result of assembling learning records from journal history."""
+
+    model_config = ConfigDict(
+        frozen=True
+    )
+
+    records: list[LearningRecord] = Field(
+        default_factory=list
+    )
+
+    unmatched_decision_ids: list[str] = Field(
+        default_factory=list
+    )
+
+    unmatched_trade_ids: list[str] = Field(
+        default_factory=list
+    )
+
+    ambiguous_broker_order_ids: list[str] = Field(
+        default_factory=list
+    )
+
+    unsupported_trade_ids: list[str] = Field(
+        default_factory=list
+    )
