@@ -267,6 +267,12 @@ class DefaultTradingEngine(TradingEngine):
 
         executed_order = await self.execution_provider.submit_order(order)
 
+        self._attach_broker_order_id(
+            decision_id=decision_id,
+            executed_order=executed_order,
+
+        )
+
         if executed_order.status is OrderStatus.FILLED:
             if self.position_manager.portfolio is not self.portfolio:
                 self.position_manager.portfolio = self.portfolio
@@ -277,15 +283,56 @@ class DefaultTradingEngine(TradingEngine):
 
         return executed_order
 
+    def _attach_broker_order_id(
+        self,
+        *,
+        decision_id: str,
+        executed_order: Order,
+    ) -> None:
+        """Attach broker execution identity to a recorded decision."""
+
+        if self.journal is None:
+            return
+
+        if executed_order.broker_order_id is None:
+            return
+
+        decision = self.journal.get_decision(
+            decision_id
+        )
+
+        if decision is None:
+            raise RuntimeError(
+                "Recorded trade decision not found: "
+                f"{decision_id}"
+            )
+
+        updated_decision = decision.model_copy(
+            update={
+                "broker_order_id": (
+                    executed_order.broker_order_id
+                ),
+                "updated_at": datetime.now(UTC),
+            }
+        )
+
+        self.journal.update_decision(
+            updated_decision
+        )
+
     async def _get_instrument(
         self,
         symbol: str,
     ) -> Instrument:
         """Resolve instrument metadata from the registry or execution venue."""
         if self.instrument_registry is not None:
-            return self.instrument_registry.get(symbol)
+            return self.instrument_registry.get(
+                symbol
+            )
 
-        return await self.execution_provider.get_instrument(symbol)
+        return await self.execution_provider.get_instrument(
+            symbol
+        )
 
     def _record_decision(
         self,
@@ -320,30 +367,62 @@ class DefaultTradingEngine(TradingEngine):
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
             risk_reward_ratio=(
-                Decimal(str(signal.risk_reward_ratio))
-                if signal.risk_reward_ratio is not None
+                Decimal(
+                    str(
+                        signal.risk_reward_ratio
+                    )
+                )
+                if signal.risk_reward_ratio
+                is not None
                 else None
             ),
-            requested_quantity=requested_quantity,
-            rationale=list(signal.rationale),
-            rejection_reasons=list(rejection_reasons or []),
+            requested_quantity=(
+                requested_quantity
+            ),
+            rationale=list(
+                signal.rationale
+            ),
+            rejection_reasons=list(
+                rejection_reasons or []
+            ),
             market_state={
-                "price": str(market_state.price),
-                "trend_score": market_state.trend_score,
-                "momentum_score": market_state.momentum_score,
-                "volatility_score": market_state.volatility_score,
-                "volatility": str(market_state.volatility),
-                "spread": str(market_state.spread),
-                "market_status": market_state.market_status.value,
-                "session": market_state.session,
-                "is_tradeable": market_state.is_tradeable,
+                "price": str(
+                    market_state.price
+                ),
+                "trend_score": (
+                    market_state.trend_score
+                ),
+                "momentum_score": (
+                    market_state.momentum_score
+                ),
+                "volatility_score": (
+                    market_state.volatility_score
+                ),
+                "volatility": str(
+                    market_state.volatility
+                ),
+                "spread": str(
+                    market_state.spread
+                ),
+                "market_status": (
+                    market_state
+                    .market_status.value
+                ),
+                "session": (
+                    market_state.session
+                ),
+                "is_tradeable": (
+                    market_state.is_tradeable
+                ),
             },
             order_id=order_id,
             created_at=now,
             updated_at=now,
         )
 
-        self.journal.record_decision(journal_entry)
+        self.journal.record_decision(
+            journal_entry
+        )
 
     @staticmethod
     def _build_order(
@@ -352,12 +431,23 @@ class DefaultTradingEngine(TradingEngine):
         quantity: Decimal,
     ) -> Order:
         """Convert an approved signal into an executable order."""
-        if signal.direction is SignalDirection.LONG:
+        if (
+            signal.direction
+            is SignalDirection.LONG
+        ):
             side = OrderSide.BUY
-        elif signal.direction is SignalDirection.SHORT:
+
+        elif (
+            signal.direction
+            is SignalDirection.SHORT
+        ):
             side = OrderSide.SELL
+
         else:
-            raise ValueError("FLAT signals cannot be converted into orders")
+            raise ValueError(
+                "FLAT signals cannot be "
+                "converted into orders"
+            )
 
         now = datetime.now(UTC)
 
