@@ -87,5 +87,90 @@ class PerformanceSummary(BaseModel):
                 "Performance trade counts "
                 "must equal total_trades"
             )
-
         return self
+
+class SegmentedPerformanceSummary(BaseModel):
+    """Performance summaries partitioned by trading dimensions."""
+
+    model_config = ConfigDict(
+        frozen=True
+    )
+
+    overall: PerformanceSummary
+
+    by_strategy: dict[
+        str,
+        PerformanceSummary,
+    ] = Field(
+        default_factory=dict
+    )
+
+    by_symbol: dict[
+        str,
+        PerformanceSummary,
+    ] = Field(
+        default_factory=dict
+    )
+
+    by_timeframe: dict[
+        str,
+        PerformanceSummary,
+    ] = Field(
+        default_factory=dict
+    )
+
+    by_session: dict[
+        str,
+        PerformanceSummary,
+    ] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(
+        mode="after"
+    )
+    def validate_segment_totals(
+        self,
+    ) -> Self:
+        dimensions = (
+            (
+                "strategy",
+                self.by_strategy,
+            ),
+            (
+                "symbol",
+                self.by_symbol,
+            ),
+            (
+                "timeframe",
+                self.by_timeframe,
+            ),
+            (
+                "session",
+                self.by_session,
+            ),
+        )
+
+        for (
+            dimension,
+            summaries,
+        ) in dimensions:
+            segmented_total = sum(
+                (
+                    summary.total_trades
+                    for summary
+                    in summaries.values()
+                ),
+                start=0,
+            )
+
+            if (
+                segmented_total
+                != self.overall.total_trades
+            ):
+                raise ValueError(
+                    f"{dimension} segment totals "
+                    "must equal overall total"
+                )
+
+        return self    
