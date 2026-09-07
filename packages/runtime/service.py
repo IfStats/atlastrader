@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Protocol
 
 from packages.core.models import Order, Quote
 from packages.engine.runner import MarketScannerRunner
@@ -11,9 +12,23 @@ from packages.intelligence.interfaces import MarketIntelligenceProvider
 from packages.market_data.base import MarketDataProvider
 from packages.market_data.service import MarketDataService
 from packages.portfolio.position_manager import PositionManager
-from packages.portfolio.reconciliation import PortfolioReconciliationService
+from packages.portfolio.reconciliation import (
+    PortfolioReconciliationService,
+)
 from packages.portfolio.service import PortfolioService
 from packages.runtime.models import RuntimeMetrics
+
+
+class SecondaryMarketDataProvider(Protocol):
+    """Lifecycle contract for non-primary market-data providers."""
+
+    async def connect(self) -> None:
+        """Connect the secondary provider."""
+        ...
+
+    async def disconnect(self) -> None:
+        """Disconnect the secondary provider."""
+        ...
 
 
 class TradingRuntime:
@@ -30,24 +45,48 @@ class TradingRuntime:
         symbols: list[str],
         interval_seconds: float = 5.0,
         market_data_provider: MarketDataProvider | None = None,
-        intelligence_providers: list[MarketIntelligenceProvider] | None = None,
+        secondary_market_data_providers: (
+            list[SecondaryMarketDataProvider] | None
+        ) = None,
+        intelligence_providers: (
+            list[MarketIntelligenceProvider] | None
+        ) = None,
         quote_stream_provider: MarketDataService | None = None,
     ) -> None:
         if not symbols:
-            raise ValueError("At least one symbol is required")
+            raise ValueError(
+                "At least one symbol is required"
+            )
 
         if interval_seconds <= 0:
-            raise ValueError("interval_seconds must be greater than zero")
+            raise ValueError(
+                "interval_seconds must be greater than zero"
+            )
 
         self.execution_provider = execution_provider
         self.market_data_provider = market_data_provider
-        self.intelligence_providers = list(intelligence_providers or [])
-        self.quote_stream_provider = quote_stream_provider
+
+        self.secondary_market_data_providers = list(
+            secondary_market_data_providers or []
+        )
+
+        self.intelligence_providers = list(
+            intelligence_providers or []
+        )
+
+        self.quote_stream_provider = (
+            quote_stream_provider
+        )
+
         self.portfolio = portfolio
         self.position_manager = position_manager
         self.reconciliation = reconciliation
         self.scanner = scanner
-        self.symbols = list(dict.fromkeys(symbols))
+
+        self.symbols = list(
+            dict.fromkeys(symbols)
+        )
+
         self.interval_seconds = interval_seconds
 
         self.runner = MarketScannerRunner(
@@ -58,9 +97,17 @@ class TradingRuntime:
 
         self._started = False
         self._market_data_subscribed = False
-        self._quote_task: asyncio.Task[None] | None = None
+
+        self._quote_task: (
+            asyncio.Task[None] | None
+        ) = None
+
         self._started_intelligence_providers: list[
             MarketIntelligenceProvider
+        ] = []
+
+        self._started_secondary_market_data_providers: list[
+            SecondaryMarketDataProvider
         ] = []
 
         self._started_at: datetime | None = None
@@ -89,22 +136,33 @@ class TradingRuntime:
     @property
     def quote_stream_running(self) -> bool:
         """Return whether the live quote consumer is running."""
-        return self._quote_task is not None and not self._quote_task.done()
+        return (
+            self._quote_task is not None
+            and not self._quote_task.done()
+        )
 
     def metrics(self) -> RuntimeMetrics:
         """Return a snapshot of runtime operational telemetry."""
         return RuntimeMetrics(
             started_at=self._started_at,
             last_scan_at=self._last_scan_at,
-            last_successful_scan_at=self._last_successful_scan_at,
-            last_reconciliation_at=self._last_reconciliation_at,
+            last_successful_scan_at=(
+                self._last_successful_scan_at
+            ),
+            last_reconciliation_at=(
+                self._last_reconciliation_at
+            ),
             last_quote_at=self._last_quote_at,
             last_error=self._last_error,
             scan_count=self._scan_count,
-            successful_scan_count=self._successful_scan_count,
+            successful_scan_count=(
+                self._successful_scan_count
+            ),
             failed_scan_count=self._failed_scan_count,
             quote_count=self._quote_count,
-            quote_stream_error_count=self._quote_stream_error_count,
+            quote_stream_error_count=(
+                self._quote_stream_error_count
+            ),
         )
 
     async def start(self) -> None:
@@ -114,15 +172,21 @@ class TradingRuntime:
 
         try:
             await self.execution_provider.connect()
+
             await self._start_intelligence_providers()
 
             if self.market_data_provider is not None:
                 await self.market_data_provider.connect()
 
+            await self._start_secondary_market_data_providers()
+
             await self.position_manager.sync_all()
 
             if self.market_data_provider is not None:
-                await self.market_data_provider.subscribe_quotes(self.symbols)
+                await self.market_data_provider.subscribe_quotes(
+                    self.symbols
+                )
+
                 self._market_data_subscribed = True
 
             await self.runner.start()
@@ -136,6 +200,7 @@ class TradingRuntime:
 
         except Exception as exc:
             self._last_error = str(exc)
+
             await self._stop_quote_consumer()
 
             if (
@@ -144,16 +209,20 @@ class TradingRuntime:
             ):
                 try:
                     await self.market_data_provider.unsubscribe_quotes(
-                        self.symbols,
+                        self.symbols
                     )
                 finally:
                     self._market_data_subscribed = False
+
+            await self._stop_secondary_market_data_providers()
 
             if self.market_data_provider is not None:
                 await self.market_data_provider.disconnect()
 
             await self._stop_intelligence_providers()
+
             await self.execution_provider.disconnect()
+
             raise
 
     async def stop(self) -> None:
@@ -163,12 +232,15 @@ class TradingRuntime:
 
         try:
             await self.runner.stop()
+
         except Exception as exc:
             self._last_error = str(exc)
             raise
+
         finally:
             try:
                 await self._stop_quote_consumer()
+
             finally:
                 try:
                     if (
@@ -176,38 +248,74 @@ class TradingRuntime:
                         and self._market_data_subscribed
                     ):
                         try:
-                            await self.market_data_provider.unsubscribe_quotes(
-                                self.symbols,
+                            await (
+                                self.market_data_provider
+                                .unsubscribe_quotes(
+                                    self.symbols
+                                )
                             )
                         finally:
                             self._market_data_subscribed = False
+
                 finally:
                     try:
-                        if self.market_data_provider is not None:
-                            await self.market_data_provider.disconnect()
+                        await (
+                            self
+                            ._stop_secondary_market_data_providers()
+                        )
+
                     finally:
                         try:
-                            await self._stop_intelligence_providers()
+                            if (
+                                self.market_data_provider
+                                is not None
+                            ):
+                                await (
+                                    self.market_data_provider
+                                    .disconnect()
+                                )
+
                         finally:
                             try:
-                                await self.execution_provider.disconnect()
+                                await (
+                                    self
+                                    ._stop_intelligence_providers()
+                                )
+
                             finally:
-                                self._started = False
+                                try:
+                                    await (
+                                        self.execution_provider
+                                        .disconnect()
+                                    )
+
+                                finally:
+                                    self._started = False
 
     async def reconcile(
         self,
         symbols: list[str] | None = None,
     ) -> None:
         """Reconcile account and tracked positions with the broker."""
-        symbols = self.symbols if symbols is None else symbols
+        symbols = (
+            self.symbols
+            if symbols is None
+            else symbols
+        )
 
         try:
-            await self.reconciliation.reconcile(symbols)
+            await self.reconciliation.reconcile(
+                symbols
+            )
+
         except Exception as exc:
             self._last_error = str(exc)
             raise
 
-        self._last_reconciliation_at = datetime.now(UTC)
+        self._last_reconciliation_at = (
+            datetime.now(UTC)
+        )
+
         self._last_error = None
 
     async def run_forever(self) -> None:
@@ -216,60 +324,150 @@ class TradingRuntime:
 
         try:
             await asyncio.Event().wait()
-        except (asyncio.CancelledError, KeyboardInterrupt):
+
+        except (
+            asyncio.CancelledError,
+            KeyboardInterrupt,
+        ):
             await self.stop()
             raise
 
-    async def scan_once(self) -> dict[str, Order | None]:
+    async def scan_once(
+        self,
+    ) -> dict[str, Order | None]:
         """Run one scanner cycle for the configured symbols."""
         self._scan_count += 1
-        self._last_scan_at = datetime.now(UTC)
+
+        self._last_scan_at = (
+            datetime.now(UTC)
+        )
 
         try:
-            result = await self.scanner.scan(self.symbols)
+            result = await self.scanner.scan(
+                self.symbols
+            )
+
         except Exception as exc:
             self._failed_scan_count += 1
             self._last_error = str(exc)
             raise
 
         self._successful_scan_count += 1
-        self._last_successful_scan_at = datetime.now(UTC)
+
+        self._last_successful_scan_at = (
+            datetime.now(UTC)
+        )
+
         self._last_error = None
 
         return result
 
-    async def _start_intelligence_providers(self) -> None:
+    async def _start_secondary_market_data_providers(
+        self,
+    ) -> None:
+        """Connect secondary market-data providers with rollback."""
+        self._started_secondary_market_data_providers = []
+
+        try:
+            for provider in (
+                self.secondary_market_data_providers
+            ):
+                await provider.connect()
+
+                self._started_secondary_market_data_providers.append(
+                    provider
+                )
+
+        except Exception:
+            await (
+                self
+                ._stop_secondary_market_data_providers()
+            )
+
+            raise
+
+    async def _stop_secondary_market_data_providers(
+        self,
+    ) -> None:
+        """Disconnect successfully started secondary providers."""
+        providers = list(
+            reversed(
+                self._started_secondary_market_data_providers
+            )
+        )
+
+        self._started_secondary_market_data_providers = []
+
+        for provider in providers:
+            try:
+                await provider.disconnect()
+
+            except (
+                RuntimeError,
+                ValueError,
+                OSError,
+            ) as exc:
+                self._last_error = str(exc)
+
+    async def _start_intelligence_providers(
+        self,
+    ) -> None:
         """Start configured intelligence providers with rollback on failure."""
         self._started_intelligence_providers = []
 
         try:
-            for provider in self.intelligence_providers:
-                start = getattr(provider, "start", None)
+            for provider in (
+                self.intelligence_providers
+            ):
+                start = getattr(
+                    provider,
+                    "start",
+                    None,
+                )
 
                 if start is None:
                     continue
 
                 await start()
-                self._started_intelligence_providers.append(provider)
+
+                self._started_intelligence_providers.append(
+                    provider
+                )
 
         except Exception:
             await self._stop_intelligence_providers()
             raise
 
-    async def _stop_intelligence_providers(self) -> None:
+    async def _stop_intelligence_providers(
+        self,
+    ) -> None:
         """Close intelligence providers that were successfully started."""
-        providers = list(reversed(self._started_intelligence_providers))
+        providers = list(
+            reversed(
+                self._started_intelligence_providers
+            )
+        )
+
         self._started_intelligence_providers = []
 
         for provider in providers:
-            close = getattr(provider, "close", None)
+            close = getattr(
+                provider,
+                "close",
+                None,
+            )
 
             if close is None:
                 continue
 
             try:
                 await close()
-            except (RuntimeError, ValueError, OSError) as exc:
+
+            except (
+                RuntimeError,
+                ValueError,
+                OSError,
+            ) as exc:
                 self._last_error = str(exc)
 
     def _quote_stream_source(
@@ -281,7 +479,9 @@ class TradingRuntime:
 
         return self.market_data_provider
 
-    def _start_quote_consumer(self) -> None:
+    def _start_quote_consumer(
+        self,
+    ) -> None:
         """Start the live quote consumer in the background."""
         if self._quote_stream_source() is None:
             return
@@ -289,9 +489,13 @@ class TradingRuntime:
         if self.quote_stream_running:
             return
 
-        self._quote_task = asyncio.create_task(self._consume_quotes())
+        self._quote_task = asyncio.create_task(
+            self._consume_quotes()
+        )
 
-    async def _stop_quote_consumer(self) -> None:
+    async def _stop_quote_consumer(
+        self,
+    ) -> None:
         """Stop the live quote consumer gracefully."""
         task = self._quote_task
 
@@ -308,10 +512,13 @@ class TradingRuntime:
 
         try:
             await task
+
         except asyncio.CancelledError:
             pass
 
-    async def _consume_quotes(self) -> None:
+    async def _consume_quotes(
+        self,
+    ) -> None:
         """Consume live quotes and maintain runtime telemetry."""
         source = self._quote_stream_source()
 
@@ -323,16 +530,24 @@ class TradingRuntime:
                 self.symbols,
                 interval_seconds=self.interval_seconds,
             ):
-                self._record_quote(quote)
+                self._record_quote(
+                    quote
+                )
 
         except asyncio.CancelledError:
             raise
 
-        except (RuntimeError, ValueError) as exc:
+        except (
+            RuntimeError,
+            ValueError,
+        ) as exc:
             self._quote_stream_error_count += 1
             self._last_error = str(exc)
 
-    def _record_quote(self, quote: Quote) -> None:
+    def _record_quote(
+        self,
+        quote: Quote,
+    ) -> None:
         """Record a successfully received live quote."""
         self._quote_count += 1
         self._last_quote_at = quote.timestamp
