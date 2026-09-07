@@ -173,4 +173,83 @@ class SegmentedPerformanceSummary(BaseModel):
                     "must equal overall total"
                 )
 
+        return self
+
+class PathPerformanceSummary(BaseModel):
+    """Immutable path-dependent realized-performance statistics."""
+
+    model_config = ConfigDict(
+        frozen=True
+    )
+
+    total_trades: int = Field(
+        ge=0
+    )
+
+    ending_cumulative_pnl: Decimal
+    peak_cumulative_pnl: Decimal
+    minimum_cumulative_pnl: Decimal
+
+    max_drawdown: Decimal = Field(
+        ge=0
+    )
+
+    max_drawdown_peak_pnl: Decimal
+    max_drawdown_trough_pnl: Decimal
+
+    max_consecutive_wins: int = Field(
+        ge=0
+    )
+    max_consecutive_losses: int = Field(
+        ge=0
+    )
+    max_consecutive_breakevens: int = Field(
+        ge=0
+    )
+
+    ending_win_streak: int = Field(
+        ge=0
+    )
+    ending_loss_streak: int = Field(
+        ge=0
+    )
+    ending_breakeven_streak: int = Field(
+        ge=0
+    )
+
+    @model_validator(
+        mode="after"
+    )
+    def validate_path_statistics(
+        self,
+    ) -> Self:
+        expected_drawdown = (
+            self.max_drawdown_peak_pnl
+            - self.max_drawdown_trough_pnl
+        )
+
+        if expected_drawdown != self.max_drawdown:
+            raise ValueError(
+                "max_drawdown must equal "
+                "peak minus trough"
+            )
+
+        streaks = (
+            self.max_consecutive_wins,
+            self.max_consecutive_losses,
+            self.max_consecutive_breakevens,
+            self.ending_win_streak,
+            self.ending_loss_streak,
+            self.ending_breakeven_streak,
+        )
+
+        if any(
+            streak > self.total_trades
+            for streak in streaks
+        ):
+            raise ValueError(
+                "Performance streak cannot "
+                "exceed total_trades"
+            )
+
         return self    
