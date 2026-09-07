@@ -86,15 +86,18 @@ class IntelligenceSettings(BaseSettings):
     enabled: bool = False
     finnhub_api_key: str | None = None
     finnhub_base_url: str = "https://finnhub.io/api/v1"
+
     request_timeout_seconds: float = Field(
         default=10.0,
         gt=0,
     )
+
     max_retries: int = Field(
         default=2,
         ge=0,
         le=10,
     )
+
     retry_backoff_seconds: float = Field(
         default=0.5,
         gt=0,
@@ -105,36 +108,43 @@ class IntelligenceSettings(BaseSettings):
 
         return bool(self.finnhub_api_key)
 
-class PolygonSettings(BaseSettings):
-    """Polygon market-data provider configuration."""
+
+class MassiveSettings(BaseSettings):
+    """Massive market-data provider configuration."""
 
     model_config = SettingsConfigDict(
-        env_prefix="ATLAS_POLYGON_",
+        env_prefix="ATLAS_MASSIVE_",
         env_file=".env",
         extra="ignore",
     )
 
     enabled: bool = False
     api_key: str | None = None
-    base_url: str = "https://api.polygon.io"
+    base_url: str = "https://api.massive.com"
+
     request_timeout_seconds: float = Field(
         default=10.0,
         gt=0,
     )
+
     max_retries: int = Field(
         default=2,
         ge=0,
         le=10,
     )
+
     retry_backoff_seconds: float = Field(
         default=0.5,
         gt=0,
     )
 
     def has_credentials(self) -> bool:
-        """Return whether a Polygon API key is configured."""
+        """Return whether a Massive API key is configured."""
 
-        return bool(self.api_key)
+        return bool(
+            self.api_key
+            and self.api_key.strip()
+        )
 
 
 class TwelveDataSettings(BaseSettings):
@@ -149,15 +159,18 @@ class TwelveDataSettings(BaseSettings):
     enabled: bool = False
     api_key: str | None = None
     base_url: str = "https://api.twelvedata.com"
+
     request_timeout_seconds: float = Field(
         default=10.0,
         gt=0,
     )
+
     max_retries: int = Field(
         default=2,
         ge=0,
         le=10,
     )
+
     retry_backoff_seconds: float = Field(
         default=0.5,
         gt=0,
@@ -166,7 +179,10 @@ class TwelveDataSettings(BaseSettings):
     def has_credentials(self) -> bool:
         """Return whether a Twelve Data API key is configured."""
 
-        return bool(self.api_key)
+        return bool(
+            self.api_key
+            and self.api_key.strip()
+        )
 
 
 class RuntimeSettings(BaseSettings):
@@ -179,15 +195,19 @@ class RuntimeSettings(BaseSettings):
     )
 
     symbols: str = "XAUUSD"
+
     initial_balance: Decimal = Field(
         default=Decimal(0),
         ge=0,
     )
+
     scan_interval_seconds: float = Field(
         default=5.0,
         gt=0,
     )
+
     timeframe: str = "M5"
+
     candle_lookback: int = Field(
         default=20,
         ge=2,
@@ -195,7 +215,10 @@ class RuntimeSettings(BaseSettings):
 
     @field_validator("timeframe")
     @classmethod
-    def normalize_timeframe(cls, value: str) -> str:
+    def normalize_timeframe(
+        cls,
+        value: str,
+    ) -> str:
         """Normalize configured timeframe names."""
 
         normalized = value.strip().upper()
@@ -214,7 +237,10 @@ class RuntimeSettings(BaseSettings):
             "1D": "D1",
         }
 
-        return aliases.get(normalized, normalized)
+        return aliases.get(
+            normalized,
+            normalized,
+        )
 
     def get_symbols(self) -> list[str]:
         """Return normalized, deduplicated trading symbols."""
@@ -230,4 +256,6 @@ class RuntimeSettings(BaseSettings):
                 "No trading symbols configured"
             )
 
-        return list(dict.fromkeys(symbols))
+        return list(
+            dict.fromkeys(symbols)
+        )
