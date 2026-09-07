@@ -2,7 +2,12 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
 from packages.core.enums import (
     OrderSide,
@@ -14,9 +19,11 @@ from packages.core.enums import (
 
 
 class TradeDecision(BaseModel):
-    """Immutable record of the reasoning and controls behind a trade decision."""
+    """Immutable record of the reasoning behind a trade decision."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(
+        frozen=True
+    )
 
     id: str
     symbol: str
@@ -30,46 +37,98 @@ class TradeDecision(BaseModel):
 
     timestamp: datetime
 
-    signal_score: float = Field(ge=0, le=100)
-    confidence: float = Field(ge=0, le=1)
+    signal_score: float = Field(
+        ge=0,
+        le=100,
+    )
+    confidence: float = Field(
+        ge=0,
+        le=1,
+    )
 
-    entry_price: Decimal | None = Field(default=None, gt=0)
-    stop_loss: Decimal | None = Field(default=None, gt=0)
-    take_profit: Decimal | None = Field(default=None, gt=0)
+    entry_price: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
+    stop_loss: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
+    take_profit: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
 
-    risk_reward_ratio: Decimal | None = Field(default=None, gt=0)
-    requested_quantity: Decimal | None = Field(default=None, gt=0)
+    risk_reward_ratio: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
+    requested_quantity: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
 
-    risk_amount: Decimal | None = Field(default=None, ge=0)
-    risk_percentage: Decimal | None = Field(default=None, ge=0, le=1)
+    risk_amount: Decimal | None = Field(
+        default=None,
+        ge=0,
+    )
+    risk_percentage: Decimal | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+    )
 
-    rationale: list[str] = Field(default_factory=list)
-    rejection_reasons: list[str] = Field(default_factory=list)
+    rationale: list[str] = Field(
+        default_factory=list
+    )
+    rejection_reasons: list[str] = Field(
+        default_factory=list
+    )
 
-    market_state: dict[str, object] = Field(default_factory=dict)
+    market_state: dict[str, object] = Field(
+        default_factory=dict
+    )
 
     order_id: str | None = None
+    broker_order_id: str | None = None
+
     created_at: datetime
     updated_at: datetime
 
-    @model_validator(mode="after")
-    def validate_decision(self) -> Self:
+    @model_validator(
+        mode="after"
+    )
+    def validate_decision(
+        self,
+    ) -> Self:
         if (
-            self.decision == SignalDirection.FLAT
+            self.decision
+            == SignalDirection.FLAT
             and self.order_id is not None
-):
-                raise ValueError(
-                    "FLAT decisions cannot have an order_id"
-                )
+        ):
+            raise ValueError(
+                "FLAT decisions cannot have an order_id"
+            )
 
         if (
-             self.decision
-             in (SignalDirection.LONG, SignalDirection.SHORT)
-             and self.entry_price is None
-):
-                raise ValueError(
-                    "Directional decisions require an entry_price"
-                )
+            self.decision
+            in (
+                SignalDirection.LONG,
+                SignalDirection.SHORT,
+            )
+            and self.entry_price is None
+        ):
+            raise ValueError(
+                "Directional decisions require an entry_price"
+            )
+
+        if (
+            self.broker_order_id is not None
+            and self.order_id is None
+        ):
+            raise ValueError(
+                "broker_order_id requires order_id"
+            )
 
         return self
 
@@ -83,13 +142,26 @@ class TradeOutcome(BaseModel):
     side: OrderSide
     order_status: OrderStatus
 
-    entry_price: Decimal = Field(gt=0)
-    exit_price: Decimal | None = Field(default=None, gt=0)
+    entry_price: Decimal = Field(
+        gt=0
+    )
+    exit_price: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
 
-    quantity: Decimal = Field(gt=0)
+    quantity: Decimal = Field(
+        gt=0
+    )
 
-    stop_loss: Decimal | None = Field(default=None, gt=0)
-    take_profit: Decimal | None = Field(default=None, gt=0)
+    stop_loss: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
+    take_profit: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
 
     gross_pnl: Decimal = Decimal(0)
     commission: Decimal = Decimal(0)
@@ -103,6 +175,10 @@ class TradeOutcome(BaseModel):
 
     exit_reason: str | None = None
 
+    entry_broker_order_ids: list[str] = Field(
+        default_factory=list
+    )
+
     maximum_adverse_excursion: Decimal | None = Field(
         default=None,
         ge=0,
@@ -112,8 +188,12 @@ class TradeOutcome(BaseModel):
         ge=0,
     )
 
-    @model_validator(mode="after")
-    def validate_outcome(self) -> Self:
+    @model_validator(
+        mode="after"
+    )
+    def validate_outcome(
+        self,
+    ) -> Self:
         if self.realized:
             if self.exit_price is None:
                 raise ValueError(

@@ -121,6 +121,14 @@ class TradeOutcomeReconciler:
 
         exit_reason = self._infer_exit_reason(exits)
 
+        entry_broker_order_ids = list(
+            dict.fromkeys(
+                 deal.broker_order_id
+                 for deal in entries
+                 if deal.broker_order_id is not None
+    )
+)
+
         return TradeOutcome(
             trade_id=position_id,
             symbol=entries[0].symbol,
@@ -137,6 +145,7 @@ class TradeOutcomeReconciler:
             opened_at=opened_at,
             closed_at=closed_at,
             exit_reason=exit_reason,
+            entry_broker_order_ids=entry_broker_order_ids,
         )
 
     @staticmethod
