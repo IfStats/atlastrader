@@ -77,24 +77,40 @@ class LearningRecord(BaseModel):
         gt=0,
     )
 
+    planned_risk_amount: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
+
+    planned_risk_percentage: Decimal | None = Field(
+        default=None,
+        gt=0,
+        le=1,
+    )
+
     market_state_price: Decimal = Field(
         gt=0
     )
+
     trend_score: float = Field(
         ge=-1,
         le=1,
     )
+
     momentum_score: float = Field(
         ge=-1,
         le=1,
     )
+
     volatility_score: float = Field(
         ge=0,
         le=1,
     )
+
     volatility: Decimal = Field(
         ge=0
     )
+
     spread: Decimal = Field(
         ge=0
     )

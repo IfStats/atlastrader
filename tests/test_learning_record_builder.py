@@ -67,6 +67,8 @@ def make_decision(
         stop_loss=Decimal("4372.97"),
         take_profit=Decimal("4387.97"),
         risk_reward_ratio=Decimal(2),
+        risk_amount=Decimal("5.00"),
+        risk_percentage=Decimal("0.0027"),
         requested_quantity=Decimal("0.01"),
         rationale=[
             "Momentum threshold satisfied",
@@ -86,7 +88,7 @@ def make_decision(
         broker_order_id=broker_order_id,
         created_at=DECIDED_AT,
         updated_at=DECIDED_AT,
-    )
+        )
 
 
 def make_outcome(
@@ -139,6 +141,16 @@ def test_builds_learning_record_from_exact_lineage() -> None:
     assert (
         record.broker_order_id
         == "broker-entry-1"
+    )
+
+    assert (
+    record.planned_risk_amount
+    == Decimal("5.00")
+    )
+
+    assert (
+    record.planned_risk_percentage
+    == Decimal("0.0027")
     )
 
     assert record.symbol == "XAUUSD"
@@ -311,3 +323,28 @@ def test_rejects_missing_required_market_feature() -> None:
             decision=decision,
             outcome=make_outcome(),
         )
+
+def test_preserves_missing_planned_risk() -> None:
+    builder = LearningRecordBuilder()
+
+    decision = make_decision().model_copy(
+        update={
+            "risk_amount": None,
+            "risk_percentage": None,
+        }
+    )
+
+    record = builder.build(
+        decision=decision,
+        outcome=make_outcome(),
+    )
+
+    assert (
+        record.planned_risk_amount
+        is None
+    )
+
+    assert (
+        record.planned_risk_percentage
+        is None
+    )        

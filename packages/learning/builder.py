@@ -105,6 +105,13 @@ class LearningRecordBuilder:
             risk_reward_ratio=(
                 decision.risk_reward_ratio
             ),
+
+            planned_risk_amount=(
+            decision.risk_amount
+            ),
+            planned_risk_percentage=(
+            decision.risk_percentage
+            ),
             market_state_price=(
                 self._decimal_feature(
                     market_state,
