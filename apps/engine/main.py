@@ -80,7 +80,12 @@ async def create_mt5_providers() -> tuple[
         path=mt5_settings.path,
     )
 
-    market_data_provider = MT5MarketDataProvider()
+    market_data_provider = MT5MarketDataProvider(
+        server_utc_offset_hours=(
+            mt5_settings.server_utc_offset_hours
+
+        ),
+    )
 
     return execution_provider, market_data_provider
 
