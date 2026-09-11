@@ -320,11 +320,11 @@ async def test_get_candles_normalizes_and_sorts_results() -> None:
     )
 
     start_ms = int(
-        start.timestamp() * 1000
+    start.replace(tzinfo=UTC).timestamp() * 1000
     )
     end_ms = int(
-        end.timestamp() * 1000
-    )
+    end.replace(tzinfo=UTC).timestamp() * 1000
+)
 
     transport.get_json.assert_awaited_once_with(
         (

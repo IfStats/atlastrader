@@ -29,6 +29,7 @@ from packages.core.config import (
 from packages.core.enums import Timeframe
 from packages.core.models import Position
 from packages.intelligence.finnhub import FinnhubMarketIntelligenceProvider
+from packages.intelligence.interfaces import MarketIntelligenceProvider
 from packages.runtime.factory import create_runtime
 from packages.runtime.service import TradingRuntime
 
@@ -37,7 +38,7 @@ RuntimeDependency = Annotated[TradingRuntime, Depends(get_runtime)]
 
 def _build_intelligence_providers(
     settings: IntelligenceSettings,
-) -> list[FinnhubMarketIntelligenceProvider]:
+) -> list[MarketIntelligenceProvider]:
     """Build enabled external market-intelligence providers."""
     if not settings.enabled or not settings.has_finnhub_credentials():
         return []
@@ -51,7 +52,6 @@ def _build_intelligence_providers(
             backoff_seconds=settings.retry_backoff_seconds,
         )
     ]
-
 
 
 def build_runtime() -> TradingRuntime:

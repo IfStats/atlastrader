@@ -19,6 +19,7 @@ from packages.execution.mt5 import MT5ExecutionProvider
 from packages.execution.preflight import MT5Preflight
 from packages.execution.service import ExecutionService
 from packages.intelligence.finnhub import FinnhubMarketIntelligenceProvider
+from packages.intelligence.interfaces import MarketIntelligenceProvider
 from packages.market_data.mt5 import MT5MarketDataProvider
 from packages.portfolio.models import PortfolioSnapshot
 from packages.risk.manager import DefaultRiskManager
@@ -28,7 +29,7 @@ from packages.runtime.service import TradingRuntime
 
 def _build_intelligence_providers(
     settings: IntelligenceSettings,
-) -> list[FinnhubMarketIntelligenceProvider]:
+) -> list[MarketIntelligenceProvider]:
     """Build enabled external market-intelligence providers."""
     if not settings.enabled or not settings.has_finnhub_credentials():
         return []
