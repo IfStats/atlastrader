@@ -48,6 +48,13 @@ class PortfolioReconciliationService:
             if position is not None:
                 broker_positions[symbol] = position
 
+        all_broker_positions = (
+          await self.provider.get_positions()
+)
+
+        for position in all_broker_positions:
+         broker_positions[position.symbol] = position        
+
         local_positions = {
             position.symbol: position
             for position in self.portfolio.positions()

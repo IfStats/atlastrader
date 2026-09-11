@@ -48,6 +48,8 @@ def make_service(
 
     broker_positions = positions or []
 
+    provider.get_positions.return_value = broker_positions
+
     async def get_position(symbol: str) -> Position | None:
         for position in broker_positions:
             if position.symbol == symbol:
@@ -211,3 +213,27 @@ async def test_reconcile_propagates_position_error() -> None:
         match="Position service unavailable",
     ):
         await service.reconcile(["XAUUSD"])
+
+@pytest.mark.asyncio
+async def test_reconcile_preserves_unconfigured_broker_position() -> None:
+    audusd = make_position(
+        symbol="AUDUSD",
+        entry_price=Decimal("0.71043"),
+        current_price=Decimal("0.71100"),
+    )
+
+    service, provider, portfolio = make_service()
+
+    # Simulate the position already imported during runtime startup.
+    portfolio.add_position(audusd)
+
+    # Broker still has the position even though AUDUSD is not
+    # one of the configured scanner symbols.
+    provider.get_positions.return_value = [audusd]
+
+    snapshot = await service.reconcile(
+        ["XAUUSD", "EURUSD"],
+    )
+
+    assert portfolio.get_position("AUDUSD") == audusd
+    assert snapshot.open_positions == 1        
