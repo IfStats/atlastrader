@@ -31,6 +31,7 @@ class SourcePriceComparison(BaseModel):
     deviation_bps: Decimal = Field(ge=0)
     is_authoritative: bool = False
     is_stale: bool = False
+    is_future: bool = False
     is_deviant: bool = False
 
     @field_validator("source")
@@ -238,7 +239,10 @@ class MarketDataComparator:
         fresh_prices = [
             comparison.price
             for comparison in comparisons
-            if not comparison.is_stale
+            if (
+                not comparison.is_stale
+                and not comparison.is_future
+            )
         ]
 
         consensus_price = self._median(
@@ -260,14 +264,24 @@ class MarketDataComparator:
 
         authoritative_comparison = comparisons[0]
 
-        if authoritative_comparison.is_stale:
+        if authoritative_comparison.is_future:
+            reasons.append(
+                "authoritative_source_future"
+            )
+            anomaly_detected = True
+        elif authoritative_comparison.is_stale:
             reasons.append(
                 "authoritative_source_stale"
             )
             anomaly_detected = True
 
         for comparison in comparisons[1:]:
-            if comparison.is_stale:
+            if comparison.is_future:
+                reasons.append(
+                    f"future_reference:{comparison.source}"
+                )
+                anomaly_detected = True
+            elif comparison.is_stale:
                 reasons.append(
                     f"stale_reference:{comparison.source}"
                 )
@@ -338,12 +352,16 @@ class MarketDataComparator:
         comparison_time: datetime,
     ) -> SourcePriceComparison:
         """Build comparison metrics for one source."""
+        raw_age_seconds = (
+            comparison_time
+            - timestamp
+        ).total_seconds()
+
+        is_future = raw_age_seconds < 0
+
         age_seconds = max(
             0.0,
-            (
-                comparison_time
-                - timestamp
-            ).total_seconds(),
+            raw_age_seconds,
         )
 
         deviation_bps = self._deviation_bps(
@@ -352,13 +370,14 @@ class MarketDataComparator:
         )
 
         is_stale = (
-            age_seconds
-            > self.max_age_seconds
+            not is_future
+            and age_seconds > self.max_age_seconds
         )
 
         is_deviant = (
             not is_authoritative
             and not is_stale
+            and not is_future
             and deviation_bps
             > self.max_deviation_bps
         )
@@ -371,6 +390,7 @@ class MarketDataComparator:
             deviation_bps=deviation_bps,
             is_authoritative=is_authoritative,
             is_stale=is_stale,
+            is_future=is_future,
             is_deviant=is_deviant,
         )
 

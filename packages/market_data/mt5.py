@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, ClassVar
 
@@ -24,7 +24,25 @@ class MT5MarketDataProvider(MarketDataProvider):
         Timeframe.D1: mt5.TIMEFRAME_D1,
     }
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        server_utc_offset_hours: float = 0.0,
+    ) -> None:
+        if not -14.0 <= server_utc_offset_hours <= 14.0:
+            raise ValueError(
+                "server_utc_offset_hours must be "
+                "between -14 and 14"
+            )
+
+        self.server_utc_offset_hours = (
+            server_utc_offset_hours
+        )
+
+        self._server_utc_offset = timedelta(
+            hours=server_utc_offset_hours
+        )
+
         self._connected = False
         self._owned_symbols: set[str] = set()
 
@@ -67,9 +85,8 @@ class MT5MarketDataProvider(MarketDataProvider):
                 f"Invalid quote received for {symbol}"
             )
 
-        timestamp = datetime.fromtimestamp(
-            int(tick.time),
-            tz=UTC,
+        timestamp = self._normalize_server_timestamp(
+            int(tick.time)
         )
 
         return Quote(
@@ -111,14 +128,25 @@ class MT5MarketDataProvider(MarketDataProvider):
             Candle(
                 symbol=symbol,
                 timeframe=timeframe,
-                timestamp=datetime.fromtimestamp(
-                    int(rate["time"]),
-                    tz=UTC,
+                timestamp=self._normalize_server_timestamp(
+                    int(rate["time"])
                 ),
-                open=self._normalize_rate_value(rate, "open"),
-                high=self._normalize_rate_value(rate, "high"),
-                low=self._normalize_rate_value(rate, "low"),
-                close=self._normalize_rate_value(rate, "close"),
+                open=self._normalize_rate_value(
+                    rate,
+                    "open",
+                ),
+                high=self._normalize_rate_value(
+                    rate,
+                    "high",
+                ),
+                low=self._normalize_rate_value(
+                    rate,
+                    "low",
+                ),
+                close=self._normalize_rate_value(
+                    rate,
+                    "close",
+                ),
                 volume=self._normalize_rate_value(
                     rate,
                     "tick_volume",
@@ -142,7 +170,9 @@ class MT5MarketDataProvider(MarketDataProvider):
         normalized_symbols = list(dict.fromkeys(symbols))
 
         if not normalized_symbols:
-            raise ValueError("At least one symbol is required")
+            raise ValueError(
+                "At least one symbol is required"
+            )
 
         for symbol in normalized_symbols:
             info = mt5.symbol_info(symbol)
@@ -150,7 +180,7 @@ class MT5MarketDataProvider(MarketDataProvider):
             if info is None:
                 error = mt5.last_error()
                 raise RuntimeError(
-                    f"Failed to retrieve symbol information "
+                    "Failed to retrieve symbol information "
                     f"for {symbol}: {error}"
                 )
 
@@ -213,7 +243,9 @@ class MT5MarketDataProvider(MarketDataProvider):
         normalized_symbols = list(dict.fromkeys(symbols))
 
         if not normalized_symbols:
-            raise ValueError("At least one symbol is required")
+            raise ValueError(
+                "At least one symbol is required"
+            )
 
         if interval_seconds <= 0:
             raise ValueError(
@@ -228,11 +260,26 @@ class MT5MarketDataProvider(MarketDataProvider):
             await asyncio.sleep(interval_seconds)
 
     def _require_connection(self) -> None:
-        """Raise when the MT5 terminal is not connected."""
+        """Raise when the provider has not been connected."""
         if not self._connected:
             raise RuntimeError(
                 "Market-data provider is not connected"
             )
+
+    def _normalize_server_timestamp(
+        self,
+        timestamp: int,
+    ) -> datetime:
+        """Convert an MT5 server timestamp to UTC."""
+        server_time = datetime.fromtimestamp(
+            timestamp,
+            tz=UTC,
+        )
+
+        return (
+            server_time
+            - self._server_utc_offset
+        )
 
     @staticmethod
     def _normalize_rate_value(

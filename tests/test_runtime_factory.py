@@ -83,6 +83,37 @@ def test_factory_passes_mt5_settings_to_execution_provider() -> None:
 
     assert execution is not None
 
+def test_factory_passes_mt5_offset_to_market_data_provider() -> None:
+    mt5_settings = MT5Settings(
+        login=123456,
+        password="test-password",
+        server="Test-Server",
+        path="terminal64.exe",
+        server_utc_offset_hours=3.0,
+    )
+
+    with (
+        patch(
+            "packages.runtime.factory.MT5ExecutionProvider",
+        ),
+        patch(
+            "packages.runtime.factory.MT5MarketDataProvider",
+        ) as market_data_class,
+    ):
+        market_data = market_data_class.return_value
+
+        runtime = create_runtime(
+            symbols=["EURUSD"],
+            settings=make_risk_settings(),
+            mt5_settings=mt5_settings,
+        )
+
+    market_data_class.assert_called_once_with(
+        server_utc_offset_hours=3.0,
+    )
+
+    assert runtime.market_data_provider is market_data    
+
 
 def test_factory_uses_default_mt5_settings_when_omitted() -> None:
     with patch(

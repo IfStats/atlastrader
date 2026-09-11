@@ -103,7 +103,12 @@ def create_runtime(
     market_data = (
         market_data_provider
         if market_data_provider is not None
-        else MT5MarketDataProvider()
+        else MT5MarketDataProvider(
+                server_utc_offset_hours=(
+                    mt5_settings.server_utc_offset_hours
+
+                ),
+        )
     )
 
     (

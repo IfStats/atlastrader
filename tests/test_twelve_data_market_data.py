@@ -76,15 +76,13 @@ async def test_get_observation_requires_connection() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_observation_normalizes_quote() -> None:
+async def test_get_observation_normalizes_live_price() -> None:
     transport = AsyncMock(
         spec=MarketDataHTTPTransport
     )
 
     transport.get_json.return_value = {
-        "symbol": "XAU/USD",
-        "timestamp": 1788775200,
-        "close": "4378.15000",
+        "price": "4378.15000",
     }
 
     provider = make_provider(
@@ -92,9 +90,13 @@ async def test_get_observation_normalizes_quote() -> None:
     )
     await provider.connect()
 
+    before = datetime.now(UTC)
+
     observation = await provider.get_observation(
         "XAUUSD"
     )
+
+    after = datetime.now(UTC)
 
     assert observation.symbol == "XAUUSD"
     assert observation.price == Decimal("4378.15000")
@@ -105,20 +107,12 @@ async def test_get_observation_normalizes_quote() -> None:
         is PriceObservationType.MID
     )
 
-    assert observation.timestamp == datetime(
-        2026,
-        9,
-        7,
-        10,
-        0,
-        tzinfo=UTC,
-    )
+    assert before <= observation.timestamp <= after
 
     transport.get_json.assert_awaited_once_with(
-        "/quote",
+        "/price",
         params={
             "symbol": "XAU/USD",
-            "timezone": "UTC",
         },
     )
 
@@ -142,8 +136,7 @@ async def test_get_observation_accepts_pair_formats(
     )
 
     transport.get_json.return_value = {
-        "timestamp": 1788775200,
-        "close": "4378.15",
+        "price": "4378.15",
     }
 
     provider = make_provider(
@@ -205,14 +198,12 @@ async def test_get_observation_raises_provider_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_observation_rejects_missing_timestamp() -> None:
+async def test_get_observation_rejects_missing_price() -> None:
     transport = AsyncMock(
         spec=MarketDataHTTPTransport
     )
 
-    transport.get_json.return_value = {
-        "close": "4378.15",
-    }
+    transport.get_json.return_value = {}
 
     provider = make_provider(
         transport
@@ -221,7 +212,7 @@ async def test_get_observation_rejects_missing_timestamp() -> None:
 
     with pytest.raises(
         RuntimeError,
-        match="timestamp",
+        match="price",
     ):
         await provider.get_observation(
             "XAUUSD"

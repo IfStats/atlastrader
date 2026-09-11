@@ -203,6 +203,35 @@ def test_stale_authoritative_source_is_anomalous() -> None:
         in result.reasons
     )
 
+def test_future_authoritative_source_is_anomalous() -> None:
+    comparator = MarketDataComparator(
+        max_age_seconds=5,
+    )
+
+    result = comparator.compare(
+        authoritative_source="MT5",
+        authoritative_quote=make_quote(
+            timestamp=(
+                BASE_TIME
+                + timedelta(hours=3)
+            ),
+        ),
+        observations=[
+            make_observation()
+        ],
+        now=BASE_TIME,
+    )
+
+    assert (
+        result.status
+        is MarketDataComparisonStatus.ANOMALOUS
+    )
+
+    assert (
+        "authoritative_source_future"
+        in result.reasons
+    )    
+
 
 def test_insufficient_fresh_sources_is_degraded() -> None:
     comparator = MarketDataComparator(
@@ -374,3 +403,35 @@ def test_comparator_rejects_invalid_configuration() -> None:
         MarketDataComparator(
             min_fresh_sources=0
         )
+
+def test_future_reference_is_anomalous() -> None:
+    comparator = MarketDataComparator(
+        max_age_seconds=5,
+    )
+
+    result = comparator.compare(
+        authoritative_source="MT5",
+        authoritative_quote=make_quote(),
+        observations=[
+            make_observation(
+                timestamp=(
+                    BASE_TIME
+                    + timedelta(hours=3)
+                ),
+            )
+        ],
+        now=BASE_TIME,
+    )
+
+    assert (
+        result.status
+        is MarketDataComparisonStatus.ANOMALOUS
+    )
+
+    assert (
+        "future_reference:Twelve Data"
+        in result.reasons
+    )
+
+    assert result.sources[1].is_future
+    assert result.fresh_source_count == 1        

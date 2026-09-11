@@ -82,7 +82,7 @@ class TwelveDataObservationalProvider(
         self,
         symbol: str,
     ) -> MarketPriceObservation:
-        """Return the latest composite midpoint observation."""
+        """Return the latest live midpoint observation."""
         self._require_connection()
 
         provider_symbol, canonical_symbol = (
@@ -91,34 +91,25 @@ class TwelveDataObservationalProvider(
 
         payload = self._require_mapping(
             await self._transport.get_json(
-                "/quote",
+                "/price",
                 params={
                     "symbol": provider_symbol,
-                    "timezone": "UTC",
                 },
             ),
-            context="quote response",
+            context="price response",
         )
 
         self._raise_for_provider_error(payload)
 
         price = self._require_positive_decimal(
             payload,
-            "close",
-        )
-
-        timestamp = self._require_positive_int(
-            payload,
-            "timestamp",
+            "price",
         )
 
         return MarketPriceObservation(
             symbol=canonical_symbol,
             price=price,
-            timestamp=datetime.fromtimestamp(
-                timestamp,
-                tz=UTC,
-            ),
+            timestamp=datetime.now(UTC),
             source="Twelve Data",
             price_type=PriceObservationType.MID,
         )

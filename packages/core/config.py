@@ -64,6 +64,12 @@ class MT5Settings(BaseSettings):
     server: str | None = None
     path: str | None = None
 
+    server_utc_offset_hours: float = Field(
+      default=0.0,
+      ge=-14.0,
+      le=14.0,
+)
+
     def has_credentials(self) -> bool:
         """Return whether explicit MT5 credentials are configured."""
 
