@@ -1,13 +1,27 @@
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Protocol
 
 from packages.core.enums import MarketStatus, Timeframe
 from packages.core.models import Candle, MarketState, Quote
 from packages.market_data.base import MarketDataProvider
 from packages.market_data.cache import MarketDataCache
 from packages.market_data.indicators import MarketIndicators
+from packages.market_data.quality import (
+    MarketDataQualityDecision,
+)
 
+
+class MarketDataQualityProvider(Protocol):
+    """Contract for pre-trade market-data quality decisions."""
+
+    async def get_quality_decision(
+        self,
+        symbol: str,
+    ) -> MarketDataQualityDecision:
+        """Return the current quality decision for a symbol."""
+        ...
 
 class MarketDataService:
     """Build normalized market states from market-data providers."""
@@ -19,6 +33,9 @@ class MarketDataService:
         timeframe: Timeframe = Timeframe.M5,
         candle_lookback: int = 20,
         cache: MarketDataCache | None = None,
+        market_data_quality_provider: (
+            MarketDataQualityProvider | None
+        ) = None,    
     ) -> None:
         if candle_lookback < 2:
             raise ValueError("candle_lookback must be at least 2")
@@ -27,6 +44,10 @@ class MarketDataService:
         self.timeframe = timeframe
         self.candle_lookback = candle_lookback
         self.cache = cache or MarketDataCache()
+        self.market_data_quality_provider = (
+            market_data_quality_provider
+        )    
+
 
     async def get_quote(self, symbol: str) -> Quote:
         """Return the latest normalized quote, using the quote cache."""
@@ -84,6 +105,24 @@ class MarketDataService:
         volatility_score = MarketIndicators.volatility_score(candles)
         volatility = self._calculate_volatility(candles)
 
+        is_tradeable = self._is_tradeable(
+         quote.spread,
+         volatility,
+)
+
+        if self.market_data_quality_provider is not None:
+         quality_decision = (
+           await self.market_data_quality_provider
+            .get_quality_decision(symbol)
+    )
+
+         is_tradeable = (
+           is_tradeable
+            and quality_decision.trading_permitted
+    )    
+
+        
+
         return MarketState(
             symbol=symbol,
             timestamp=quote.timestamp,
@@ -95,11 +134,10 @@ class MarketDataService:
             volatility=volatility,
             spread=quote.spread,
             market_status=MarketStatus.OPEN,
-            is_tradeable=self._is_tradeable(
-                quote.spread,
-                volatility,
-            ),
+            is_tradeable=is_tradeable,
+                
         )
+        
 
     async def stream_quotes(
         self,

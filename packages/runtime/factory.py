@@ -130,10 +130,15 @@ def create_runtime(
     )
 
     normalized_market_data = MarketDataService(
-        market_data,
-        timeframe=timeframe,
-        candle_lookback=candle_lookback,
-    )
+    market_data,
+    timeframe=timeframe,
+    candle_lookback=candle_lookback,
+    market_data_quality_provider=(
+        market_data_quality_service
+        if not intelligence_providers
+        else None
+    ),
+)
 
     strategy_service = StrategyService(
         [

@@ -10,7 +10,13 @@ from packages.core.enums import Timeframe
 from packages.core.models import Candle, Quote
 from packages.market_data.base import MarketDataProvider
 from packages.market_data.cache import MarketDataCache
+from packages.market_data.comparison import (
+    MarketDataComparisonStatus,
+)
 from packages.market_data.indicators import MarketIndicators
+from packages.market_data.quality import (
+    MarketDataQualityDecision,
+)
 from packages.market_data.service import MarketDataService
 
 
@@ -492,3 +498,77 @@ async def test_streamed_quote_is_returned_from_cached_quote() -> None:
 
     assert cached_quote == quote
     provider.get_quote.assert_not_awaited()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "trading_permitted",
+        "expected_tradeable",
+        "status",
+    ),
+    [
+        (
+            True,
+            True,
+            MarketDataComparisonStatus.HEALTHY,
+        ),
+        (
+            False,
+            False,
+            MarketDataComparisonStatus.ANOMALOUS,
+        ),
+    ],
+)
+async def test_get_market_state_applies_market_data_quality_decision(
+    trading_permitted: bool,
+    expected_tradeable: bool,
+    status: MarketDataComparisonStatus,
+) -> None:
+    provider = make_provider()
+
+    timestamp = datetime.now(UTC)
+
+    provider.get_quote.return_value = Quote(
+        symbol="XAUUSD",
+        bid=Decimal("3350.25"),
+        ask=Decimal("3350.45"),
+        timestamp=timestamp,
+    )
+
+    provider.get_candles.return_value = make_candles()
+
+    quality_provider = AsyncMock()
+
+    quality_provider.get_quality_decision.return_value = (
+        MarketDataQualityDecision(
+            trading_permitted=trading_permitted,
+            confidence_multiplier=(
+                1.0
+                if trading_permitted
+                else 0.0
+            ),
+            status=status,
+            reasons=[],
+        )
+    )
+
+    service = MarketDataService(
+        provider,
+        timeframe=Timeframe.M5,
+        market_data_quality_provider=(
+            quality_provider
+        ),
+    )
+
+    state = await service.get_market_state(
+        "XAUUSD"
+    )
+
+    assert (
+        state.is_tradeable
+        is expected_tradeable
+    )
+
+    quality_provider.get_quality_decision.assert_awaited_once_with(
+        "XAUUSD"
+    )

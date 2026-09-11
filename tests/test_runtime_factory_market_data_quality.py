@@ -372,3 +372,48 @@ def test_factory_rejects_enabled_twelve_data_without_api_key() -> None:
                 )
             ),
         )
+
+def test_secondary_quality_guards_non_autonomous_market_data() -> None:
+    execution = MagicMock(
+        spec=ExecutionProvider
+    )
+
+    market_data = MagicMock(
+        spec=MarketDataProvider
+    )
+
+    massive_settings = MassiveSettings(
+        enabled=True,
+        api_key="massive-test-key",
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    with patch(
+        "packages.runtime.factory."
+        "MassiveMarketDataProvider",
+    ):
+        runtime = create_runtime(
+            symbols=["XAUUSD"],
+            settings=make_risk_settings(),
+            execution_provider=execution,
+            market_data_provider=market_data,
+            intelligence_providers=None,
+            massive_settings=massive_settings,
+            twelve_data_settings=(
+                disabled_twelve_data_settings()
+            ),
+        )
+
+    assert runtime.scanner.autonomous is False
+
+    normalized_market_data = (
+        runtime.scanner.engine.market_data_provider
+    )
+
+    assert normalized_market_data is not None
+
+    assert (
+        normalized_market_data
+        .market_data_quality_provider
+        is not None
+    )        
