@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ENV_EXAMPLE = Path(".env.example")
 
 
