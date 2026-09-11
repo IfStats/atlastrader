@@ -490,4 +490,24 @@ def test_snapshot_reflects_realized_pnl_after_close() -> None:
     assert snapshot.open_positions == 0
     assert snapshot.total_exposure == Decimal(0)
 
+def test_snapshot_uses_contract_size_for_notional_exposure() -> None:
+    portfolio = PortfolioService(
+        balance=Decimal("1864.43"),
+    )
 
+    position = Position(
+        symbol="AUDUSD",
+        side=OrderSide.BUY,
+        status=PositionStatus.OPEN,
+        quantity=Decimal("0.01"),
+        entry_price=Decimal("0.71043"),
+        current_price=Decimal("0.71043"),
+        contract_size=Decimal("100000"),
+        opened_at=NOW,
+    )
+
+    portfolio.add_position(position)
+
+    snapshot = portfolio.snapshot()
+
+    assert snapshot.total_exposure == Decimal("710.43")

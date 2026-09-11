@@ -552,12 +552,31 @@ class MT5ExecutionProvider(ExecutionProvider):
             tz=UTC,
         )
 
+        symbol = str(position.symbol)
+
+        info = mt5.symbol_info(symbol)
+
+        if info is None:
+         raise RuntimeError(
+        f"Unable to retrieve instrument metadata: {symbol}"
+    )
+
+        contract_size = Decimal(
+         str(info.trade_contract_size)
+)
+
+        if contract_size <= Decimal(0):
+         raise ValueError(
+        f"Invalid contract size for {symbol}"
+    )
+
         return Position(
-            symbol=str(position.symbol),
+            symbol=symbol,
             broker_position_id=str(position.ticket),
             side=side,
             status=PositionStatus.OPEN,
             quantity=Decimal(str(position.volume)),
+            contract_size=contract_size,
             entry_price=Decimal(str(position.price_open)),
             current_price=Decimal(str(position.price_current)),
             stop_loss=(

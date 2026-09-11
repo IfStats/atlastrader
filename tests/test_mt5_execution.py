@@ -443,3 +443,43 @@ async def test_submit_order_continues_when_no_existing_position() -> None:
 
     assert submitted.status is OrderStatus.FILLED
     order_send.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_get_position_maps_contract_size() -> None:
+    provider = make_provider()
+
+    broker_position = MagicMock()
+    broker_position.ticket = 12345
+    broker_position.type = mt5.POSITION_TYPE_BUY
+    broker_position.time = 1789150000
+    broker_position.symbol = "AUDUSD"
+    broker_position.volume = 0.01
+    broker_position.price_open = 0.71043
+    broker_position.price_current = 0.71100
+    broker_position.sl = 0.0
+    broker_position.tp = 0.0
+    broker_position.profit = 5.70
+
+    info = MagicMock()
+    info.trade_contract_size = 100000.0
+
+    with (
+        patch(
+            "packages.execution.mt5.mt5.terminal_info",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "packages.execution.mt5.mt5.positions_get",
+            return_value=[broker_position],
+        ),
+        patch(
+            "packages.execution.mt5.mt5.symbol_info",
+            return_value=info,
+        ),
+    ):
+        provider._connected = True
+
+        position = await provider.get_position("AUDUSD")
+
+    assert position is not None
+    assert position.contract_size == Decimal("100000.0")    

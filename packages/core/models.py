@@ -191,6 +191,14 @@ class Order(BaseModel):
 
     status: OrderStatus = OrderStatus.PENDING
     quantity: Decimal = Field(gt=0)
+    contract_size: Decimal = Field(
+      default=Decimal(1),
+      gt=0,
+)
+
+    
+
+ 
 
     price: Decimal | None = Field(default=None, gt=0)
     stop_loss: Decimal | None = Field(default=None, gt=0)
@@ -213,6 +221,11 @@ class Position(BaseModel):
     status: PositionStatus = PositionStatus.OPEN
 
     quantity: Decimal = Field(gt=0)
+
+    contract_size: Decimal = Field(
+      default=Decimal(1),
+      gt=0,
+)
 
     entry_price: Decimal = Field(gt=0)
     current_price: Decimal = Field(gt=0)

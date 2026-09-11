@@ -196,3 +196,21 @@ def test_signal_rejected_when_symbol_already_has_position() -> None:
         market_state,
         portfolio.snapshot(),
     ) is False
+
+def test_order_rejected_when_contract_notional_exceeds_exposure_limit() -> None:
+    manager = DefaultRiskManager(make_settings())
+
+    order = Order(
+        id="order-contract-exposure",
+        symbol="XAUUSD",
+        side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        status=OrderStatus.PENDING,
+        quantity=Decimal("0.02"),
+        contract_size=Decimal("100"),
+        price=Decimal("3350"),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    assert manager.validate_order(order) is False    

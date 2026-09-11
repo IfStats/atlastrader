@@ -393,3 +393,29 @@ async def test_engine_without_journal_preserves_existing_behavior() -> None:
 
     assert result is not None
     assert result.status is OrderStatus.FILLED
+
+@pytest.mark.asyncio
+async def test_execute_signal_propagates_contract_size_to_order() -> None:
+    risk_manager = MagicMock()
+    risk_manager.approve_signal.return_value = True
+    risk_manager.validate_order.return_value = True
+
+    engine = make_engine(
+        risk_manager=risk_manager,
+    )
+
+    await engine.execution_provider.connect()
+
+
+    try:
+       order = await engine.execute_signal(
+        make_signal(),
+        make_market_state(),
+    )
+
+    finally:
+        await engine.execution_provider.disconnect()
+    
+
+    assert order is not None
+    assert order.contract_size == Decimal("100")    

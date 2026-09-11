@@ -175,7 +175,12 @@ class DefaultRiskManager(RiskManager):
         order_exposure = Decimal(0)
 
         if order.price is not None:
-            order_exposure = order.price * order.quantity
+            order_exposure = (
+                order.price 
+                * order.quantity
+                * order.contract_size
+            )
+
 
         if current_exposure + order_exposure > max_exposure:
             return False

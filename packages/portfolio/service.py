@@ -174,7 +174,9 @@ class PortfolioService:
 
         total_exposure = sum(
             (
-                position.entry_price * position.quantity
+                position.entry_price 
+                * position.quantity
+                * position.contract_size
                 for position in positions
             ),
             Decimal(0),
