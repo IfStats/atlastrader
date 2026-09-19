@@ -502,7 +502,7 @@ def test_snapshot_uses_contract_size_for_notional_exposure() -> None:
         quantity=Decimal("0.01"),
         entry_price=Decimal("0.71043"),
         current_price=Decimal("0.71043"),
-        contract_size=Decimal("100000"),
+        contract_size=Decimal(100000),
         opened_at=NOW,
     )
 

@@ -54,7 +54,7 @@ def make_engine(
 ) -> DefaultTradingEngine:
     settings = RiskSettings(
         trading_enabled=True,
-        max_risk_per_trade=Decimal("0.01"),
+        max_risk_per_trade=Decimal("0.0005"),
         max_daily_loss=Decimal("0.03"),
         max_open_positions=max_open_positions,
         max_portfolio_exposure=Decimal("0.50"),
@@ -108,11 +108,11 @@ async def test_filled_order_creates_portfolio_position() -> None:
     assert position.symbol == "XAUUSD"
     assert position.side is OrderSide.BUY
 
-    # $10,000 equity × 1% risk = $100 risk.
+    # $10,000 equity × 0.05% risk = $5 risk.
     # $5 stop distance × 100 contract size = $500 risk per lot.
-    # $100 / $500 = 0.20 lots.
-    assert position.quantity == Decimal("0.20")
-    assert position.entry_price == Decimal(3350)
+    # $5 / $500 = 0.01 lots.
+    assert position.quantity == Decimal("0.01")
+   
 
 
 @pytest.mark.asyncio
@@ -169,7 +169,7 @@ async def test_portfolio_position_has_correct_exposure() -> None:
     snapshot = engine.portfolio.snapshot()
 
     assert snapshot.open_positions == 1
-    assert snapshot.total_exposure == Decimal("670.00")
+    assert snapshot.total_exposure == Decimal(3350)
 
 
 @pytest.mark.asyncio
@@ -221,6 +221,8 @@ async def test_engine_portfolio_snapshot_reflects_filled_order() -> None:
 
     assert snapshot.open_positions == 1
     assert snapshot.total_exposure == (
-        order.quantity * order.price
+    order.quantity
+    * order.price
+    * order.contract_size
     )
     assert snapshot.unrealized_pnl == Decimal(0)

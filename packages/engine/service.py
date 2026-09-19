@@ -226,6 +226,7 @@ class DefaultTradingEngine(TradingEngine):
         order = self._build_order(
             signal=signal,
             quantity=quantity,
+            contract_size=instrument.contract_size,
         )
 
         approved = self.risk_manager.validate_order(
@@ -429,6 +430,7 @@ class DefaultTradingEngine(TradingEngine):
         *,
         signal: Signal,
         quantity: Decimal,
+        contract_size: Decimal,
     ) -> Order:
         """Convert an approved signal into an executable order."""
         if (
@@ -458,6 +460,7 @@ class DefaultTradingEngine(TradingEngine):
             order_type=OrderType.MARKET,
             status=OrderStatus.PENDING,
             quantity=quantity,
+            contract_size=contract_size,
             price=signal.entry_price,
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,

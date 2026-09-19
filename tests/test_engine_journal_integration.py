@@ -143,6 +143,7 @@ async def test_approved_signal_is_recorded_in_journal() -> None:
     order = engine._build_order(
         signal=signal,
         quantity=Decimal("0.01"),
+        contract_size=make_instrument().contract_size,
     )
 
     engine._record_decision(
@@ -418,4 +419,4 @@ async def test_execute_signal_propagates_contract_size_to_order() -> None:
     
 
     assert order is not None
-    assert order.contract_size == Decimal("100")    
+    assert order.contract_size == Decimal(100)    

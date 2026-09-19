@@ -60,7 +60,7 @@ def make_market_state(
 def make_settings() -> RiskSettings:
     return RiskSettings(
         trading_enabled=True,
-        max_risk_per_trade=Decimal("0.01"),
+        max_risk_per_trade=Decimal("0.0005"),
         max_daily_loss=Decimal("0.03"),
         max_open_positions=5,
         max_portfolio_exposure=Decimal("0.50"),

@@ -30,6 +30,7 @@ class PositionManager:
             broker_position_id=None,
             side=order.side,
             quantity=order.quantity,
+            contract_size=order.contract_size,
             entry_price=order.price,
             current_price=order.price,
             stop_loss=order.stop_loss,

@@ -14,7 +14,7 @@ from packages.core.config import (
     RuntimeSettings,
 )
 from packages.core.enums import MarketStatus, OrderSide, OrderType, Timeframe
-from packages.core.models import MarketState, Order
+from packages.core.models import MarketState, Order, Position
 from packages.execution.mt5 import MT5ExecutionProvider
 from packages.execution.preflight import MT5Preflight
 from packages.execution.service import ExecutionService
@@ -50,6 +50,7 @@ __all__ = [
     "RiskSettings",
     "RuntimeSettings",
     "build_demo_order",
+    "build_demo_portfolio_snapshot",
     "create_mt5_providers",
     "main",
     "parse_args",
@@ -226,6 +227,7 @@ def build_demo_order(
     *,
     side: OrderSide,
     price: Decimal,
+    contract_size: Decimal,
 ) -> Order:
     """Build the single controlled demo order."""
 
@@ -244,6 +246,7 @@ def build_demo_order(
         side=side,
         order_type=OrderType.MARKET,
         quantity=DEMO_VOLUME,
+        contract_size=contract_size,
         price=price,
         stop_loss=stop_loss,
         take_profit=take_profit,
@@ -251,6 +254,34 @@ def build_demo_order(
         updated_at=now,
     )
 
+def build_demo_portfolio_snapshot(
+    *,
+    balance: Decimal,
+    equity: Decimal,
+    positions: Sequence[Position],
+) -> PortfolioSnapshot:
+    """Build broker-backed portfolio state for demo-order risk validation."""
+
+    total_exposure = sum(
+        (
+            position.entry_price
+            * position.quantity
+            * position.contract_size
+            for position in positions
+        ),
+        Decimal(0),
+    )
+
+    return PortfolioSnapshot(
+        balance=balance,
+        equity=equity,
+        open_positions=len(positions),
+        total_exposure=total_exposure,
+        open_symbols=tuple(
+            position.symbol
+            for position in positions
+        ),
+    )
 
 async def run_demo_order(
     *,
@@ -332,19 +363,23 @@ async def run_demo_order(
             is_tradeable=True,
         )
 
+        instrument = await execution_provider.get_instrument(
+            DEMO_SYMBOL
+        )
+
         order = build_demo_order(
             side=side,
             price=execution_price,
+            contract_size=instrument.contract_size,
         )
 
-        portfolio = PortfolioSnapshot(
-            balance=account.balance,
-            equity=account.equity,
-            open_positions=len(
-                await execution_provider.get_positions()
-            ),
-            total_exposure=Decimal(0),
-        )
+        positions = await execution_provider.get_positions()
+
+        portfolio = build_demo_portfolio_snapshot(
+        balance=account.balance,
+        equity=account.equity,
+        positions=positions,
+)
 
         risk_manager = DefaultRiskManager(risk_settings)
 
@@ -452,6 +487,7 @@ async def run_runtime() -> None:
         return
     finally:
         await runtime.stop()
+
 
 
 def parse_args(
