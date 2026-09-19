@@ -169,15 +169,18 @@ class MT5Preflight:
                         - quote.timestamp.astimezone(UTC)
                     ).total_seconds()
 
-                    quote_status[symbol] = (
-                        quote_age_seconds
-                        <= self.max_quote_age_seconds
+                    if quote_age_seconds < 0:
+                       quote_status[symbol] = False
+                       blockers.append(
+                       f"Quote timestamp is in the future: {symbol}"
                     )
-
-                    if not quote_status[symbol]:
-                        blockers.append(
-                            f"Quote is stale: {symbol}"
-                        )
+                    elif quote_age_seconds > self.max_quote_age_seconds:
+                         quote_status[symbol] = False
+                         blockers.append(
+                         f"Quote is stale: {symbol}"
+    )
+                    else:
+                        quote_status[symbol] = True
 
             except (KeyError, RuntimeError, ValueError):
                 quote_status[symbol] = False
