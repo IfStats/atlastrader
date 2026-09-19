@@ -197,6 +197,7 @@ async def test_demo_order_dry_run_checks_safety_without_submitting() -> None:
     preflight.run.return_value = SimpleNamespace(
         ready=True,
         blockers=[],
+        quote_status={"XAUUSD": True},
     )
 
     risk_manager = MagicMock()
@@ -294,4 +295,57 @@ def test_build_demo_order_uses_instrument_tick_size() -> None:
 
     assert order.symbol == "EURUSD"
     assert order.stop_loss == Decimal("1.08000")
-    assert order.take_profit == Decimal("1.09500")       
+    assert order.take_profit == Decimal("1.09500")
+
+@pytest.mark.asyncio
+async def test_demo_order_fails_closed_when_quote_not_live() -> None:
+    execution_provider = AsyncMock()
+    market_data_provider = AsyncMock()
+
+    execution_provider.get_position.return_value = None
+
+    market_data_provider.get_quote.return_value = SimpleNamespace(
+        ask=Decimal("3350.20"),
+        bid=Decimal("3350.00"),
+        spread=Decimal("0.20"),
+        timestamp=app.datetime.now(app.UTC),
+    )
+
+    preflight = AsyncMock()
+    preflight.run.return_value = SimpleNamespace(
+        ready=True,
+        blockers=[],
+        quote_status={"XAUUSD": False},
+    )
+
+    with (
+        patch.object(
+            app,
+            "RiskSettings",
+            return_value=app.RiskSettings(
+                trading_enabled=False,
+            ),
+        ),
+        patch.object(
+            app,
+            "create_mt5_providers",
+            new=AsyncMock(
+                return_value=(
+                    execution_provider,
+                    market_data_provider,
+                )
+            ),
+        ),
+        patch.object(
+            app,
+            "MT5Preflight",
+            return_value=preflight,
+        ),
+    ):
+        result = await app.run_demo_order(
+            side=app.OrderSide.BUY,
+            dry_run=True,
+        )
+
+    assert result == 1
+    market_data_provider.get_quote.assert_not_awaited()         

@@ -339,6 +339,19 @@ async def run_demo_order(
 
             return 1
 
+        quote_is_live = preflight_result.quote_status.get(
+            symbol,
+            False,
+        )
+
+        if not quote_is_live:
+            print()
+            print("DEMO ORDER: BLOCKED")
+            print(
+                f"Broker quote is not live for {symbol}. "
+                "Market state cannot be marked tradeable."
+            )
+            return 1
         account = await execution_provider.get_account_snapshot()
 
         existing_position = await execution_provider.get_position(
@@ -371,8 +384,12 @@ async def run_demo_order(
             volatility_score=0.0,
             volatility=Decimal(0),
             spread=quote.spread,
-            market_status=MarketStatus.OPEN,
-            is_tradeable=True,
+            market_status=(
+                MarketStatus.OPEN
+                if quote_is_live
+                else MarketStatus.CLOSED
+        ),
+        is_tradeable=quote_is_live,
         )
 
         instrument = await execution_provider.get_instrument(
