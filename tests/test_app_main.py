@@ -1,12 +1,14 @@
 import asyncio
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from types import SimpleNamespace
 from apps.engine import main as app
 from packages.core.enums import PositionStatus
 from packages.core.models import Position
+from packages.execution.safety import ExecutionSafetyDecision
 
 
 @pytest.mark.asyncio
@@ -142,3 +144,112 @@ def test_demo_portfolio_snapshot_includes_existing_position_exposure() -> None:
     assert snapshot.open_positions == 1
     assert snapshot.total_exposure == Decimal("710.43")
     assert snapshot.equity == Decimal("1871.29")    
+
+@pytest.mark.asyncio
+async def test_main_routes_demo_order_dry_run() -> None:
+    run_demo_order = AsyncMock(return_value=0)
+
+    with patch.object(
+        app,
+        "run_demo_order",
+        run_demo_order,
+    ):
+        result = await app.main(
+            [
+                "--demo-order",
+                "--side",
+                "BUY",
+                "--dry-run",
+            ]
+        )
+
+    assert result == 0
+    run_demo_order.assert_awaited_once_with(
+        side=app.OrderSide.BUY,
+        dry_run=True,
+    )
+
+@pytest.mark.asyncio
+async def test_demo_order_dry_run_checks_safety_without_submitting() -> None:
+    execution_provider = AsyncMock()
+    market_data_provider = AsyncMock()
+
+    execution_provider.get_account_snapshot.return_value = SimpleNamespace(
+        balance=Decimal("10000"),
+        equity=Decimal("10000"),
+    )
+    execution_provider.get_position.return_value = None
+    execution_provider.get_positions.return_value = []
+    execution_provider.get_instrument.return_value = SimpleNamespace(
+        contract_size=Decimal(100),
+    )
+
+    market_data_provider.get_quote.return_value = SimpleNamespace(
+        ask=Decimal(3350),
+        bid=Decimal("3349.80"),
+        spread=Decimal("0.20"),
+        timestamp=app.datetime.now(app.UTC),
+    )
+
+    preflight = AsyncMock()
+    preflight.run.return_value = SimpleNamespace(
+        ready=True,
+        blockers=[],
+    )
+
+    risk_manager = MagicMock()
+    risk_manager.validate_order.return_value = True
+
+    execution_service = MagicMock()
+    execution_service.safety_gate.authorize = AsyncMock(
+        return_value=ExecutionSafetyDecision.allow()
+    )
+    execution_service.submit_order = AsyncMock()
+
+    with (
+        patch.object(
+            app,
+            "RiskSettings",
+            return_value=app.RiskSettings(
+                trading_enabled=False,
+            ),
+        ),
+        patch.object(
+            app,
+            "create_mt5_providers",
+            new=AsyncMock(
+                return_value=(
+                    execution_provider,
+                    market_data_provider,
+                )
+            ),
+        ),
+        patch.object(
+            app,
+            "MT5Preflight",
+            return_value=preflight,
+        ),
+        patch.object(
+            app,
+            "DefaultRiskManager",
+            return_value=risk_manager,
+        ),
+        patch.object(
+            app,
+            "ExecutionService",
+            return_value=execution_service,
+        ),
+    ):
+        result = await app.run_demo_order(
+            side=app.OrderSide.BUY,
+            dry_run=True,
+        )
+
+    assert result == 0
+
+    execution_provider.connect.assert_awaited_once()
+    risk_manager.validate_order.assert_called_once()
+    execution_service.safety_gate.authorize.assert_awaited_once()
+
+    execution_service.submit_order.assert_not_awaited()
+    execution_provider.submit_order.assert_not_awaited()

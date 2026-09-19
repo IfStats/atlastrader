@@ -286,12 +286,13 @@ def build_demo_portfolio_snapshot(
 async def run_demo_order(
     *,
     side: OrderSide,
+    dry_run: bool = False,
 ) -> int:
     """Submit exactly one controlled XAUUSD demo order."""
 
     risk_settings = RiskSettings()
 
-    if not risk_settings.trading_enabled:
+    if not risk_settings.trading_enabled and not dry_run:
         print("DEMO ORDER: BLOCKED")
         print("AtlasTrader trading is disabled.")
         return 1
@@ -376,12 +377,22 @@ async def run_demo_order(
         positions = await execution_provider.get_positions()
 
         portfolio = build_demo_portfolio_snapshot(
-        balance=account.balance,
-        equity=account.equity,
-        positions=positions,
-)
+            balance=account.balance,
+            equity=account.equity,
+            positions=positions,
+        )
 
-        risk_manager = DefaultRiskManager(risk_settings)
+        effective_risk_settings = (
+            risk_settings.model_copy(
+                update={"trading_enabled": True}
+            )
+            if dry_run
+            else risk_settings
+        )
+
+        risk_manager = DefaultRiskManager(
+            effective_risk_settings
+        )
 
         execution_service = ExecutionService(
             provider=execution_provider,
@@ -403,6 +414,43 @@ async def run_demo_order(
         print()
 
         print("Running RiskManager and ExecutionSafetyGate...")
+
+        if dry_run:
+            risk_approved = risk_manager.validate_order(
+                order,
+                portfolio,
+                market_state,
+            )
+
+            if not risk_approved:
+                print()
+                print("DEMO ORDER DRY RUN: REJECTED")
+                print("  RiskManager rejected the order.")
+                return 1
+
+            safety_decision = (
+                await execution_service.safety_gate.authorize(
+                    order,
+                    market_state=market_state,
+                )
+            )
+
+            if not safety_decision.authorized:
+                print()
+                print("DEMO ORDER DRY RUN: REJECTED")
+                print(
+                    "  ExecutionSafetyGate rejected the order."
+                )
+
+                for reason in safety_decision.reasons:
+                    print(f"  - {reason}")
+
+                return 1
+
+            print()
+            print("DEMO ORDER DRY RUN: APPROVED")
+            print("  No order was submitted.")
+            return 0
 
         result = await execution_service.submit_order(
             order,
@@ -520,8 +568,18 @@ def parse_args(
         help="Required direction for --demo-order: BUY or SELL.",
     )
 
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Run demo-order preflight and risk checks "
+            "without submitting an order."
+    ),
+)
+
     return parser.parse_args(argv)
 
+     
 
 async def main(
     argv: Sequence[str] | None = (),
@@ -540,7 +598,10 @@ async def main(
             )
             return 2
 
-        return await run_demo_order(side=args.side)
+        return await run_demo_order(
+            side=args.side,
+            dry_run=args.dry_run,
+        )
 
     await run_runtime()
     return 0
