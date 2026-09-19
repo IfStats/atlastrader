@@ -1,10 +1,10 @@
 import asyncio
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from types import SimpleNamespace
 from apps.engine import main as app
 from packages.core.enums import PositionStatus
 from packages.core.models import Position
@@ -165,6 +165,7 @@ async def test_main_routes_demo_order_dry_run() -> None:
 
     assert result == 0
     run_demo_order.assert_awaited_once_with(
+        symbol="XAUUSD",
         side=app.OrderSide.BUY,
         dry_run=True,
     )
@@ -175,13 +176,14 @@ async def test_demo_order_dry_run_checks_safety_without_submitting() -> None:
     market_data_provider = AsyncMock()
 
     execution_provider.get_account_snapshot.return_value = SimpleNamespace(
-        balance=Decimal("10000"),
-        equity=Decimal("10000"),
+        balance=Decimal(10000),
+        equity=Decimal(10000),
     )
     execution_provider.get_position.return_value = None
     execution_provider.get_positions.return_value = []
     execution_provider.get_instrument.return_value = SimpleNamespace(
         contract_size=Decimal(100),
+        tick_size=Decimal("0.01"),
     )
 
     market_data_provider.get_quote.return_value = SimpleNamespace(
@@ -253,3 +255,43 @@ async def test_demo_order_dry_run_checks_safety_without_submitting() -> None:
 
     execution_service.submit_order.assert_not_awaited()
     execution_provider.submit_order.assert_not_awaited()
+
+@pytest.mark.asyncio
+async def test_main_routes_demo_order_symbol() -> None:
+    run_demo_order = AsyncMock(return_value=0)
+
+    with patch.object(
+        app,
+        "run_demo_order",
+        run_demo_order,
+    ):
+        result = await app.main(
+            [
+                "--demo-order",
+                "--symbol",
+                "AUDUSD",
+                "--side",
+                "BUY",
+                "--dry-run",
+            ]
+        )
+
+    assert result == 0
+    run_demo_order.assert_awaited_once_with(
+        symbol="AUDUSD",
+        side=app.OrderSide.BUY,
+        dry_run=True,
+    )
+
+def test_build_demo_order_uses_instrument_tick_size() -> None:
+    order = app.build_demo_order(
+        symbol="EURUSD",
+        side=app.OrderSide.BUY,
+        price=Decimal("1.08500"),
+        contract_size=Decimal(100000),
+        tick_size=Decimal("0.00001"),
+    )
+
+    assert order.symbol == "EURUSD"
+    assert order.stop_loss == Decimal("1.08000")
+    assert order.take_profit == Decimal("1.09500")       

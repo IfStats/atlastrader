@@ -62,8 +62,8 @@ __all__ = [
 
 DEMO_SYMBOL = "XAUUSD"
 DEMO_VOLUME = Decimal("0.01")
-DEMO_STOP_DISTANCE = Decimal("5.00")
-DEMO_TAKE_PROFIT_DISTANCE = Decimal("10.00")
+DEMO_STOP_TICKS = Decimal(500)
+DEMO_TAKE_PROFIT_TICKS = Decimal(1000)
 
 
 async def create_mt5_providers() -> tuple[
@@ -228,21 +228,31 @@ def build_demo_order(
     side: OrderSide,
     price: Decimal,
     contract_size: Decimal,
+    symbol: str = DEMO_SYMBOL,
+    tick_size: Decimal = Decimal("0.01"),
 ) -> Order:
     """Build the single controlled demo order."""
 
+    if tick_size <= Decimal(0):
+        raise ValueError("tick_size must be greater than zero")
+
+    stop_distance = tick_size * DEMO_STOP_TICKS
+    take_profit_distance = (
+        tick_size * DEMO_TAKE_PROFIT_TICKS
+    )
+
     if side is OrderSide.BUY:
-        stop_loss = price - DEMO_STOP_DISTANCE
-        take_profit = price + DEMO_TAKE_PROFIT_DISTANCE
+        stop_loss = price - stop_distance
+        take_profit = price + take_profit_distance
     else:
-        stop_loss = price + DEMO_STOP_DISTANCE
-        take_profit = price - DEMO_TAKE_PROFIT_DISTANCE
+        stop_loss = price + stop_distance
+        take_profit = price - take_profit_distance
 
     now = datetime.now(UTC)
 
     return Order(
         id=str(uuid4()),
-        symbol=DEMO_SYMBOL,
+        symbol=symbol,
         side=side,
         order_type=OrderType.MARKET,
         quantity=DEMO_VOLUME,
@@ -285,6 +295,7 @@ def build_demo_portfolio_snapshot(
 
 async def run_demo_order(
     *,
+    symbol: str = DEMO_SYMBOL,
     side: OrderSide,
     dry_run: bool = False,
 ) -> int:
@@ -313,7 +324,7 @@ async def run_demo_order(
         preflight = MT5Preflight(
             execution_provider=execution_provider,
             market_data_provider=market_data_provider,
-            symbols=[DEMO_SYMBOL],
+            symbols=[symbol],
         )
 
         preflight_result = await preflight.run()
@@ -331,19 +342,19 @@ async def run_demo_order(
         account = await execution_provider.get_account_snapshot()
 
         existing_position = await execution_provider.get_position(
-            DEMO_SYMBOL
+            symbol
         )
 
         if existing_position is not None:
             print()
             print("DEMO ORDER: BLOCKED")
             print(
-                f"An existing {DEMO_SYMBOL} position is present. "
+                f"An existing {symbol} position is present. "
                 "No new order will be submitted."
             )
             return 1
 
-        quote = await market_data_provider.get_quote(DEMO_SYMBOL)
+        quote = await market_data_provider.get_quote(symbol)
 
         if side is OrderSide.BUY:
             execution_price = quote.ask
@@ -351,7 +362,7 @@ async def run_demo_order(
             execution_price = quote.bid
 
         market_state = MarketState(
-            symbol=DEMO_SYMBOL,
+            symbol=symbol,
             timestamp=quote.timestamp,
             timeframe=Timeframe.M5,
             price=execution_price,
@@ -365,13 +376,15 @@ async def run_demo_order(
         )
 
         instrument = await execution_provider.get_instrument(
-            DEMO_SYMBOL
+            symbol=symbol,
         )
 
         order = build_demo_order(
+            symbol=symbol,
             side=side,
             price=execution_price,
             contract_size=instrument.contract_size,
+            tick_size=instrument.tick_size,
         )
 
         positions = await execution_provider.get_positions()
@@ -577,6 +590,15 @@ def parse_args(
     ),
 )
 
+    parser.add_argument(
+            "--symbol",
+            default=DEMO_SYMBOL,
+            help=(
+                "Instrument for the controlled demo-order flow "
+                f"(default: {DEMO_SYMBOL})."
+        ),
+        
+    )
     return parser.parse_args(argv)
 
      
@@ -599,6 +621,7 @@ async def main(
             return 2
 
         return await run_demo_order(
+            symbol=args.symbol.upper(),
             side=args.side,
             dry_run=args.dry_run,
         )
