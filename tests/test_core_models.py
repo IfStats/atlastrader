@@ -428,3 +428,62 @@ def test_instrument_rejects_max_volume_not_aligned_to_step() -> None:
             created_at=NOW,
             updated_at=NOW,
         )
+
+def test_market_state_supports_breakout_range() -> None:
+    state = MarketState(
+        symbol="XAUUSD",
+        timeframe=Timeframe.M5,
+        timestamp=NOW,
+        price=Decimal("3352.00"),
+        trend_score=0.80,
+        momentum_score=0.82,
+        volatility_score=0.60,
+        volatility=Decimal("5.00"),
+        spread=Decimal("0.20"),
+        is_tradeable=True,
+        range_high=Decimal("3350.00"),
+        range_low=Decimal("3335.00"),
+    )
+
+    assert state.range_high == Decimal("3350.00")
+    assert state.range_low == Decimal("3335.00")
+
+def test_market_state_rejects_partial_breakout_range() -> None:
+    with pytest.raises(
+        ValueError,
+        match="range_high and range_low must be provided together",
+    ):
+        MarketState(
+            symbol="XAUUSD",
+            timeframe=Timeframe.M5,
+            timestamp=NOW,
+            price=Decimal("3352.00"),
+            trend_score=0.80,
+            momentum_score=0.82,
+            volatility_score=0.60,
+            volatility=Decimal("5.00"),
+            spread=Decimal("0.20"),
+            is_tradeable=True,
+            range_high=Decimal("3350.00"),
+        )
+
+
+def test_market_state_rejects_invalid_breakout_range() -> None:
+    with pytest.raises(
+        ValueError,
+        match="range_high must be greater than range_low",
+    ):
+        MarketState(
+            symbol="XAUUSD",
+            timeframe=Timeframe.M5,
+            timestamp=NOW,
+            price=Decimal("3352.00"),
+            trend_score=0.80,
+            momentum_score=0.82,
+            volatility_score=0.60,
+            volatility=Decimal("5.00"),
+            spread=Decimal("0.20"),
+            is_tradeable=True,
+            range_high=Decimal("3335.00"),
+            range_low=Decimal("3350.00"),
+        )            

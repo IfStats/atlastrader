@@ -572,3 +572,43 @@ async def test_get_market_state_applies_market_data_quality_decision(
     quality_provider.get_quality_decision.assert_awaited_once_with(
         "XAUUSD"
     )
+
+@pytest.mark.asyncio
+async def test_get_market_state_derives_breakout_range_from_prior_candles() -> None:
+    provider = make_provider()
+
+    timestamp = datetime.now(UTC)
+
+    provider.get_quote.return_value = Quote(
+        symbol="XAUUSD",
+        bid=Decimal("3432.00"),
+        ask=Decimal("3432.20"),
+        timestamp=timestamp,
+    )
+
+    candles = make_candles()
+
+    provider.get_candles.return_value = candles
+
+    service = MarketDataService(
+        provider,
+        timeframe=Timeframe.M5,
+        candle_lookback=20,
+    )
+
+    state = await service.get_market_state("XAUUSD")
+
+    prior_candles = candles[:-1]
+
+    expected_range_high = max(
+        candle.high for candle in prior_candles
+    )
+    expected_range_low = min(
+        candle.low for candle in prior_candles
+    )
+
+    assert state.range_high == expected_range_high
+    assert state.range_low == expected_range_low
+
+    # The latest candle must not redefine the breakout boundary.
+    assert state.range_high != candles[-1].high

@@ -155,9 +155,41 @@ class MarketState(BaseModel):
     volatility: Decimal = Field(ge=0)
     spread: Decimal = Field(ge=0)
 
+    range_high: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
+    range_low: Decimal | None = Field(
+        default=None,
+        gt=0,
+    )
+
     market_status: MarketStatus = MarketStatus.UNKNOWN
     session: str | None = None
     is_tradeable: bool = False
+
+    @model_validator(mode="after")
+    def validate_breakout_range(self) -> "MarketState":
+        if (
+            self.range_high is None
+            and self.range_low is None
+        ):
+            return self
+
+        if (
+            self.range_high is None
+            or self.range_low is None
+        ):
+            raise ValueError(
+                "range_high and range_low must be provided together"
+            )
+
+        if self.range_high <= self.range_low:
+            raise ValueError(
+                "range_high must be greater than range_low"
+            )
+
+        return self
 
 
 class Signal(BaseModel):

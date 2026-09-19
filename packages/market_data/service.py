@@ -105,6 +105,15 @@ class MarketDataService:
         volatility_score = MarketIndicators.volatility_score(candles)
         volatility = self._calculate_volatility(candles)
 
+        prior_candles = candles[:-1]
+
+        range_high = max(
+           candle.high for candle in prior_candles
+)
+        range_low = min(
+           candle.low for candle in prior_candles
+)
+
         is_tradeable = self._is_tradeable(
          quote.spread,
          volatility,
@@ -133,8 +142,11 @@ class MarketDataService:
             volatility_score=volatility_score,
             volatility=volatility,
             spread=quote.spread,
+            range_high=range_high,
+            range_low=range_low,
             market_status=MarketStatus.OPEN,
             is_tradeable=is_tradeable,
+            
                 
         )
         
