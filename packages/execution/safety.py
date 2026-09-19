@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Protocol
 
+from packages.core.enums import MarketStatus
 from packages.core.models import Instrument, MarketState, Order
 from packages.execution.interfaces import ExecutionProvider
 
@@ -117,6 +118,12 @@ class DefaultExecutionSafetyGate(ExecutionSafetyGate):
                 reasons.append(
                     "Market state symbol does not match order symbol"
                 )
+
+            if market_state.market_status is not MarketStatus.OPEN:
+                reasons.append(
+                    "Market status is not open: "
+                    f"{order.symbol} ({market_state.market_status.value})"
+    )
 
             if not market_state.is_tradeable:
                 reasons.append(

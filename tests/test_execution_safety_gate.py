@@ -296,3 +296,26 @@ async def test_gate_blocks_account_expert_trading_disabled() -> None:
         "Execution account expert trading is not allowed"
         in decision.reasons
     )
+
+@pytest.mark.asyncio
+async def test_gate_blocks_closed_market_status_even_if_tradeable() -> None:
+    provider = make_provider()
+    gate = DefaultExecutionSafetyGate(provider=provider)
+
+    market_state = make_market_state().model_copy(
+        update={
+            "market_status": MarketStatus.CLOSED,
+            "is_tradeable": True,
+        }
+    )
+
+    decision = await gate.authorize(
+        make_order(),
+        market_state=market_state,
+    )
+
+    assert decision.authorized is False
+    assert (
+        "Market status is not open: XAUUSD (closed)"
+        in decision.reasons
+    )    
