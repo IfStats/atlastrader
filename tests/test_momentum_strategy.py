@@ -35,10 +35,10 @@ def test_momentum_strategy_generates_short_signal() -> None:
 
     assert signal is not None
     assert signal.symbol == "XAUUSD"
-    assert signal.direction is SignalDirection.SHORT
+    assert signal.direction is SignalDirection.LONG
     assert signal.entry_price == Decimal(3350)
-    assert signal.stop_loss == Decimal(3355)
-    assert signal.take_profit == Decimal(3340)
+    assert signal.stop_loss == Decimal(3345)
+    assert signal.take_profit == Decimal(3360)
     assert signal.risk_reward_ratio == 2.0
     assert signal.score == 77
 
@@ -104,3 +104,39 @@ def test_momentum_strategy_uses_custom_risk_reward_ratio() -> None:
     assert signal.direction is SignalDirection.LONG
     assert signal.risk_reward_ratio == 3.0
     assert signal.take_profit == Decimal(3365)
+
+def test_momentum_strategy_generates_short_from_bearish_alignment() -> None:
+    strategy = MomentumStrategy()
+
+    signal = strategy.generate_signal(
+        make_market_state(
+            trend_score=-0.80,
+            momentum_score=-0.85,
+        )
+    )
+
+    assert signal is not None
+    assert signal.direction is SignalDirection.SHORT
+    assert signal.entry_price == Decimal(3350)
+    assert signal.stop_loss == Decimal(3355)
+    assert signal.take_profit == Decimal(3340)
+
+def test_momentum_strategy_returns_none_for_mixed_direction() -> None:
+    strategy = MomentumStrategy()
+
+    bullish_trend_bearish_momentum = strategy.generate_signal(
+        make_market_state(
+            trend_score=0.85,
+            momentum_score=-0.85,
+        )
+    )
+
+    bearish_trend_bullish_momentum = strategy.generate_signal(
+        make_market_state(
+            trend_score=-0.85,
+            momentum_score=0.85,
+        )
+    )
+
+    assert bullish_trend_bearish_momentum is None
+    assert bearish_trend_bullish_momentum is None     

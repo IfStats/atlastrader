@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -8,7 +7,7 @@ from packages.strategy.interfaces import Strategy
 
 
 class MomentumStrategy(Strategy):
-    """Deterministic momentum strategy for development and testing."""
+    """Deterministic momentum strategy."""
 
     def __init__(
         self,
@@ -17,19 +16,28 @@ class MomentumStrategy(Strategy):
         risk_reward_ratio: float = 2.0,
     ) -> None:
         if minimum_score < Decimal(0):
-            raise ValueError("minimum_score must be non-negative")
+            raise ValueError(
+                "minimum_score must be non-negative"
+            )
 
         if minimum_score > Decimal(1):
-            raise ValueError("minimum_score must not exceed 1")
+            raise ValueError(
+                "minimum_score must not exceed 1"
+            )
 
         if risk_reward_ratio <= 0:
-            raise ValueError("risk_reward_ratio must be greater than zero")
+            raise ValueError(
+                "risk_reward_ratio must be greater than zero"
+            )
 
         self.minimum_score = minimum_score
         self.risk_reward_ratio = risk_reward_ratio
 
-    def generate_signal(self, market_state: MarketState) -> Signal | None:
-        """Generate a momentum signal from the current market state."""
+    def generate_signal(
+        self,
+        market_state: MarketState,
+    ) -> Signal | None:
+        """Generate a momentum signal from market state."""
 
         if not market_state.is_tradeable:
             return None
@@ -40,24 +48,36 @@ class MomentumStrategy(Strategy):
         if market_state.volatility <= Decimal(0):
             return None
 
-        momentum_score = Decimal(str(market_state.momentum_score))
-        trend_score = Decimal(str(market_state.trend_score))
+        momentum_score = Decimal(
+            str(market_state.momentum_score)
+        )
+        trend_score = Decimal(
+            str(market_state.trend_score)
+        )
 
-        if momentum_score < self.minimum_score:
-            return None
+        bullish_alignment = (
+            trend_score >= self.minimum_score
+            and momentum_score >= self.minimum_score
+        )
 
-        if trend_score < self.minimum_score:
-            return None
+        bearish_alignment = (
+            trend_score <= -self.minimum_score
+            and momentum_score <= -self.minimum_score
+        )
 
-        if momentum_score >= trend_score:
+        if bullish_alignment:
             direction = SignalDirection.LONG
-        else:
+        elif bearish_alignment:
             direction = SignalDirection.SHORT
+        else:
+            return None
 
         entry_price = market_state.price
         risk_distance = market_state.volatility
+
         reward_distance = (
-            risk_distance * Decimal(str(self.risk_reward_ratio))
+            risk_distance
+            * Decimal(str(self.risk_reward_ratio))
         )
 
         if direction is SignalDirection.LONG:
@@ -75,7 +95,11 @@ class MomentumStrategy(Strategy):
                 return None
 
         signal_score = int(
-            (trend_score + momentum_score) * Decimal(50)
+            (
+                abs(trend_score)
+                + abs(momentum_score)
+            )
+            * Decimal(50)
         )
 
         return Signal(
@@ -95,4 +119,3 @@ class MomentumStrategy(Strategy):
                 "Market is tradeable",
             ],
         )
-
