@@ -73,6 +73,7 @@ class PortfolioReconciliationService:
                         "side": broker_position.side,
                         "status": broker_position.status,
                         "quantity": broker_position.quantity,
+                        "contract_size": broker_position.contract_size,
                         "entry_price": broker_position.entry_price,
                         "current_price": broker_position.current_price,
                         "stop_loss": broker_position.stop_loss,

@@ -237,3 +237,35 @@ async def test_reconcile_preserves_unconfigured_broker_position() -> None:
 
     assert portfolio.get_position("AUDUSD") == audusd
     assert snapshot.open_positions == 1        
+
+@pytest.mark.asyncio
+async def test_reconcile_refreshes_contract_size_from_broker() -> None:
+    broker_position = make_position(
+        quantity=Decimal("0.01"),
+        entry_price=Decimal(3350),
+        current_price=Decimal(3350),
+    ).model_copy(
+        update={"contract_size": Decimal(100)}
+    )
+
+    service, _, portfolio = make_service(
+        positions=[broker_position],
+    )
+
+    local_position = make_position(
+        quantity=Decimal("0.01"),
+        entry_price=Decimal(3350),
+        current_price=Decimal(3350),
+    ).model_copy(
+        update={"contract_size": Decimal(1)}
+    )
+
+    portfolio.add_position(local_position)
+
+    snapshot = await service.reconcile(["XAUUSD"])
+
+    position = portfolio.get_position("XAUUSD")
+
+    assert position is not None
+    assert position.contract_size == Decimal(100)
+    assert snapshot.total_exposure == Decimal(3350)
