@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -92,7 +93,7 @@ def market_data() -> MagicMock:
             symbol="XAUUSD",
             bid=Decimal("4329.36"),
             ask=Decimal("4329.49"),
-            timestamp=MagicMock(),
+            timestamp=datetime.now(UTC),
         )
     )
     return provider
@@ -199,3 +200,31 @@ async def test_preflight_reads_positions(
 
     execution.get_positions.assert_awaited_once()
     assert result.positions == []
+
+@pytest.mark.asyncio
+async def test_preflight_blocks_stale_quote(
+    execution: MagicMock,
+    market_data: MagicMock,
+) -> None:
+    market_data.get_quote.return_value = Quote(
+        symbol="XAUUSD",
+        bid=Decimal("4329.36"),
+        ask=Decimal("4329.49"),
+        timestamp=(
+            datetime.now(UTC)
+            - timedelta(minutes=5)
+        ),
+    )
+
+    preflight = MT5Preflight(
+        execution_provider=execution,
+        market_data_provider=market_data,
+        symbols=["XAUUSD"],
+        max_quote_age_seconds=60,
+    )
+
+    result = await preflight.run()
+
+    assert result.ready is False
+    assert result.checks["quote:XAUUSD"] is False
+    assert "Quote is stale: XAUUSD" in result.blockers

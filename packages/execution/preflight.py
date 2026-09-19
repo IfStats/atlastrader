@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from packages.core.models import (
@@ -40,15 +41,22 @@ class MT5Preflight:
         execution_provider: MT5ExecutionProvider,
         market_data_provider: MarketDataProvider,
         symbols: list[str],
+        max_quote_age_seconds: float = 60.0,
     ) -> None:
         normalized_symbols = list(dict.fromkeys(symbols))
 
         if not normalized_symbols:
             raise ValueError("At least one symbol is required")
 
+        if max_quote_age_seconds <= 0:
+            raise ValueError(
+             "max_quote_age_seconds must be greater than zero"
+        )
+
         self.execution_provider = execution_provider
         self.market_data_provider = market_data_provider
         self.symbols = normalized_symbols
+        self.max_quote_age_seconds = max_quote_age_seconds
 
     async def run(self) -> MT5PreflightResult:
         """Run all read-only MT5 readiness checks."""
@@ -141,20 +149,43 @@ class MT5Preflight:
 
         for symbol in self.symbols:
             try:
-                quote = await self.market_data_provider.get_quote(symbol)
-                quote_status[symbol] = (
+                quote = await self.market_data_provider.get_quote(
+                    symbol
+                )
+
+                quote_valid = (
                     quote.bid > Decimal(0)
                     and quote.ask > Decimal(0)
                 )
+
+                if not quote_valid:
+                    quote_status[symbol] = False
+                    blockers.append(
+                        f"Quote unavailable or invalid: {symbol}"
+                    )
+                else:
+                    quote_age_seconds = (
+                        datetime.now(UTC)
+                        - quote.timestamp.astimezone(UTC)
+                    ).total_seconds()
+
+                    quote_status[symbol] = (
+                        quote_age_seconds
+                        <= self.max_quote_age_seconds
+                    )
+
+                    if not quote_status[symbol]:
+                        blockers.append(
+                            f"Quote is stale: {symbol}"
+                        )
+
             except (KeyError, RuntimeError, ValueError):
                 quote_status[symbol] = False
-
-            checks[f"quote:{symbol}"] = quote_status[symbol]
-
-            if not quote_status[symbol]:
                 blockers.append(
                     f"Quote unavailable or invalid: {symbol}"
                 )
+
+            checks[f"quote:{symbol}"] = quote_status[symbol]
 
         return MT5PreflightResult(
             terminal=terminal,
